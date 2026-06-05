@@ -1,0 +1,30 @@
+- id: esa_worldcover_2021
+  name: ESA WorldCover 10m 2021
+  description: >
+    ESA WorldCover 10m landcover classification for 2021 (v2), fetched via the
+    Copernicus Data Space Ecosystem (CDSE) openEO service. Requires a free CDSE
+    account with CDSE_USERNAME and CDSE_PASSWORD environment variables set.
+
+    Classes (integer codes):
+      10  Tree cover
+      20  Shrubland
+      30  Grassland
+      40  Cropland
+      50  Built-up
+      60  Bare / sparse vegetation
+      70  Snow and ice
+      80  Permanent water bodies
+      90  Herbaceous wetland
+      95  Mangroves
+      100 Moss and lichen
+
+  bands:
+    - name: landcover
+      units: "1"
+      dtype: uint8
+      nodata: 0
+
+  plugin:
+    class: plugins.datasets.worldcover.WorldCoverPlugin
+    params:
+      year: 2021

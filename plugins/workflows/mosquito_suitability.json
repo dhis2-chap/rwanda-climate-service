@@ -32,7 +32,7 @@
     "load_landcover": {
       "process_id": "load_collection",
       "arguments": {
-        "id": "worldpop_population_yearly"
+        "id": "esa_worldcover_2021"
       }
     },
     "load_rice": {
