@@ -1,0 +1,24 @@
+- id: africa_rice_fields_2023
+  name: Africa rice fields (Jiang et al. 2023)
+  short_name: Rice fields
+  variable: rice
+  period_type: yearly
+  sync:
+    kind: static
+  extents:
+    spatial:
+      bbox: [-180, -90, 180, 90]
+    temporal:
+      begin: "2023"
+      end: "2023"
+      resolution: P1Y
+  ingestion:
+    plugin: rice_fields.RiceFieldsPlugin
+    params: {}
+  units: binary
+  resolution: 20 m
+  source: Jiang et al. 2023
+  source_url: https://zenodo.org/records/13729353
+  display:
+    colormap: greens
+    range: [0, 1]

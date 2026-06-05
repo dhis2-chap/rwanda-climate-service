@@ -1,0 +1,25 @@
+- id: chelsa_temperature_monthly
+  name: 2m temperature (CHELSA v2.1)
+  short_name: 2m temperature
+  variable: temperature
+  period_type: monthly
+  sync:
+    kind: temporal
+    execution: append
+  extents:
+    spatial:
+      bbox: [-180, -90, 180, 90]
+    temporal:
+      begin: "1981-01"
+      end: "2018-12"
+      resolution: P1M
+  ingestion:
+    plugin: chelsa.CHELSATemperaturePlugin
+    params: {}
+  units: degC
+  resolution: ~1 km
+  source: CHELSA v2.1
+  source_url: https://chelsa-climate.org
+  display:
+    colormap: rdbu_r
+    range: [-10.0, 35.0]

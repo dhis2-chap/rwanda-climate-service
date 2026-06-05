@@ -1,0 +1,103 @@
+{
+  "id": "mosquito_suitability",
+  "summary": "Mosquito suitability, exposure, and hotspot pipeline",
+  "description": "Full chap-GIS pipeline: temperature-based suitability, distance-decay exposure to breeding sites, population-weighted hotspot identification, and spatial aggregation to administrative units. Requires ERA5-Land or CHELSA temperature, ESA WorldCover, rice fields, and WorldPop population.",
+  "parameters": [
+    {
+      "name": "temporal_extent",
+      "description": "Time range to process, e.g. [\"2020-01-01\", \"2020-12-31\"]",
+      "schema": {"type": "array"}
+    },
+    {
+      "name": "data_element_id",
+      "description": "DHIS2 data element UID for export",
+      "schema": {"type": "string"}
+    },
+    {
+      "name": "org_unit_field",
+      "description": "Field name containing DHIS2 org unit UIDs after spatial aggregation",
+      "schema": {"type": "string"},
+      "optional": true,
+      "default": "geometry"
+    }
+  ],
+  "process_graph": {
+    "load_temperature": {
+      "process_id": "load_collection",
+      "arguments": {
+        "id": "era5land_temperature_monthly",
+        "temporal_extent": {"from_parameter": "temporal_extent"}
+      }
+    },
+    "load_landcover": {
+      "process_id": "load_collection",
+      "arguments": {
+        "id": "worldpop_population_yearly"
+      }
+    },
+    "load_rice": {
+      "process_id": "load_collection",
+      "arguments": {
+        "id": "africa_rice_fields_2023"
+      }
+    },
+    "load_population": {
+      "process_id": "load_collection",
+      "arguments": {
+        "id": "worldpop_population_yearly",
+        "temporal_extent": {"from_parameter": "temporal_extent"}
+      }
+    },
+    "compute_suitability": {
+      "process_id": "suitability",
+      "arguments": {
+        "temperature": {"from_node": "load_temperature"}
+      }
+    },
+    "compute_exposure": {
+      "process_id": "exposure",
+      "arguments": {
+        "suitability": {"from_node": "compute_suitability"},
+        "landcover": {"from_node": "load_landcover"},
+        "rice": {"from_node": "load_rice"}
+      }
+    },
+    "compute_hotspots": {
+      "process_id": "hotspots",
+      "arguments": {
+        "population": {"from_node": "load_population"},
+        "exposure": {"from_node": "compute_exposure"},
+        "percentile": 90.0
+      }
+    },
+    "aggregate": {
+      "process_id": "aggregate_spatial",
+      "arguments": {
+        "data": {"from_node": "compute_hotspots"},
+        "geometries": null,
+        "reducer": {
+          "process_graph": {
+            "mean": {
+              "process_id": "mean",
+              "arguments": {"data": {"from_parameter": "data"}},
+              "result": true
+            }
+          }
+        }
+      }
+    },
+    "export": {
+      "process_id": "save_result",
+      "arguments": {
+        "data": {"from_node": "aggregate"},
+        "format": "CHAPCSV",
+        "options": {
+          "data_element_id": {"from_parameter": "data_element_id"},
+          "org_unit_field": {"from_parameter": "org_unit_field"},
+          "period_type": "monthly"
+        }
+      },
+      "result": true
+    }
+  }
+}

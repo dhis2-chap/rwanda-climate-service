@@ -7,3 +7,4 @@ extent:
   country_code: RWA
 
 data_dir: ./data
+plugins_dir: ./plugins/
