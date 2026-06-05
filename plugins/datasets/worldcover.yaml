@@ -1,9 +1,9 @@
 - id: esa_worldcover_2021
   name: ESA WorldCover 10m 2021
   description: >
-    ESA WorldCover 10m landcover classification for 2021 (v2), fetched via the
-    Copernicus Data Space Ecosystem (CDSE) openEO service. Requires a free CDSE
-    account with CDSE_USERNAME and CDSE_PASSWORD environment variables set.
+    ESA WorldCover 10m landcover classification for 2021 (v200), fetched from
+    the AWS Open Data public S3 bucket (s3://esa-worldcover). No credentials
+    required. Tiles are downloaded on first use and cached at ~/.cache/chap-gis/.
 
     Classes (integer codes):
       10  Tree cover
@@ -26,5 +26,3 @@
 
   plugin:
     class: plugins.datasets.worldcover.WorldCoverPlugin
-    params:
-      year: 2021

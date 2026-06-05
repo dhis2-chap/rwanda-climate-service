@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 description = "Open Climate Service instance for Rwanda"
 dependencies = [
     "open-climate-service @ git+https://github.com/dhis2/open-climate-service.git",
+    "s3fs>=2026.4.0",
 ]
 
 [tool.uv]
