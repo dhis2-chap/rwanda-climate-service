@@ -13,7 +13,7 @@ import xarray as xr
 from open_climate_service.streaming.protocol import GridSpec
 
 _ZENODO_RECORD = "13729353"
-_ZENODO_URL = f"https://zenodo.org/records/{_ZENODO_RECORD}/files/Africa_rice_paddies_2023_20m.tif"
+_ZENODO_URL = f"https://zenodo.org/records/{_ZENODO_RECORD}/files/Rwanda.tif"
 _RESOLUTION_DEG = 20 / (111_320)  # 20m in degrees (approx)
 
 
@@ -81,7 +81,7 @@ class RiceFieldsPlugin:
     def _ensure_downloaded(self) -> Path:
         cache_dir = Path.home() / ".cache" / "chap-gis"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        target = cache_dir / "Africa_rice_paddies_2023_20m.tif"
+        target = cache_dir / "Rwanda_rice_paddies_2023_20m.tif"
         if not target.exists():
             import httpx
 

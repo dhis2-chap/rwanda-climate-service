@@ -13,7 +13,7 @@
       end: "2023"
       resolution: P1Y
   ingestion:
-    plugin: rice_fields.RiceFieldsPlugin
+    plugin: datasets.rice_fields.RiceFieldsPlugin
     params: {}
   units: binary
   resolution: 20 m

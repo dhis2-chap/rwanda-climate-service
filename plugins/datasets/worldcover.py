@@ -109,7 +109,14 @@ class WorldCoverPlugin:
             da = xr.open_dataarray(path, engine="rasterio").squeeze(drop=True)
             arrays.append(da)
 
-        merged = arrays[0] if len(arrays) == 1 else xr.combine_by_coords(arrays)
+        if len(arrays) == 1:
+            merged = arrays[0]
+        else:
+            combined = xr.combine_by_coords(arrays, combine_attrs="drop_conflicts")
+            if isinstance(combined, xr.Dataset):
+                merged = combined[list(combined.data_vars)[0]]
+            else:
+                merged = combined
         clipped = merged.sel(x=slice(xmin, xmax), y=slice(ymax, ymin)).load()
 
         ts = np.datetime64("2021-01-01", "D").astype("datetime64[ns]")

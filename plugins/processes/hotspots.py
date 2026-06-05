@@ -37,6 +37,9 @@ def hotspots(
     xr.DataArray
         Binary mask: 1 = hotspot, 0 = non-hotspot, same grid as inputs.
     """
+    if population.shape != exposure.shape:
+        population = population.interp_like(exposure, method="nearest")
+
     pop_exp = (population.values * exposure.values).astype("float32")
     nonzero = pop_exp[pop_exp > 0]
     if len(nonzero) == 0:

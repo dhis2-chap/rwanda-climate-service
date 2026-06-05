@@ -14,7 +14,7 @@ from open_climate_service.streaming.protocol import GridSpec
 
 # CHELSA v2.1 monthly mean temperature (tas) on SwitchDrive
 _CHELSA_URL = (
-    "https://os.zhdk.cloud.switch.ch/envicloud/chelsa/chelsa_V2/"
+    "https://os.zhdk.cloud.switch.ch/chelsav2/"
     "GLOBAL/monthly/tas/CHELSA_tas_{month:02d}_{year}_V.2.1.tif"
 )
 

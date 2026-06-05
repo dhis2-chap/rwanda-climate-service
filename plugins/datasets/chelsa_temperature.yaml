@@ -14,7 +14,7 @@
       end: "2018-12"
       resolution: P1M
   ingestion:
-    plugin: chelsa.CHELSATemperaturePlugin
+    plugin: datasets.chelsa.CHELSATemperaturePlugin
     params: {}
   units: degC
   resolution: ~1 km

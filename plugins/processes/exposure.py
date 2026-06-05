@@ -68,6 +68,11 @@ def exposure(
     """
     from scipy.ndimage import distance_transform_edt
 
+    if landcover.shape != suitability.shape:
+        landcover = landcover.interp_like(suitability, method="nearest")
+    if rice is not None and rice.shape != suitability.shape:
+        rice = rice.interp_like(suitability, method="nearest")
+
     breeding = _breeding_mask(landcover, rice)
     # Euclidean distance transform to nearest breeding site (in pixels)
     no_breeding = breeding == 0

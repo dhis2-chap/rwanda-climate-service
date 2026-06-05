@@ -18,11 +18,24 @@
       95  Mangroves
       100 Moss and lichen
 
-  bands:
-    - name: landcover
-      units: "1"
-      dtype: uint8
-      nodata: 0
-
-  plugin:
-    class: plugins.datasets.worldcover.WorldCoverPlugin
+  variable: landcover
+  period_type: yearly
+  sync:
+    kind: static
+  extents:
+    spatial:
+      bbox: [-180, -90, 180, 90]
+    temporal:
+      begin: "2021"
+      end: "2021"
+      resolution: P1Y
+  ingestion:
+    plugin: datasets.worldcover.WorldCoverPlugin
+    params: {}
+  units: "1"
+  resolution: 10 m
+  source: ESA WorldCover v200
+  source_url: https://esa-worldcover.org
+  display:
+    colormap: tab10
+    range: [10, 100]
