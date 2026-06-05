@@ -1,0 +1,28 @@
+[project]
+name = "rwanda-climate-service"
+version = "0.1.0"
+requires-python = ">=3.13"
+description = "Open Climate Service instance for Rwanda"
+dependencies = [
+    "open-climate-service @ git+https://github.com/dhis2/open-climate-service.git",
+]
+
+[tool.uv]
+package = false
+override-dependencies = [
+    "geojson-pydantic>=2.1.0",
+    "zarr>=3.1.6",
+    "pyarrow>=19.0",
+    "xarray>=2025.12.0",
+    "numpy>=2.2",
+    "dask>=2024.1.0",
+    "dask-geopandas>=0.4",
+    "geopandas>=1.1",
+    "xvec>=0.3",
+    "rioxarray>=0.17",
+    "pystac>=1.10",
+    "gdal==3.12.2",
+]
+
+[tool.uv.sources]
+open-climate-service = { git = "https://github.com/dhis2/open-climate-service.git", branch = "main" }

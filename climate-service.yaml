@@ -1,0 +1,9 @@
+id: rwanda-climate-service
+name: Rwanda Climate Service
+
+extent:
+  name: Rwanda
+  bbox: [28.8, -2.9, 30.9, -1.0]
+  country_code: RWA
+
+data_dir: ./data
