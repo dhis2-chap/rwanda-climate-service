@@ -232,6 +232,60 @@ Equivalent to `suitability.thermal_suitability`. Source: [`plugins/processes/sui
 
 | chap-GIS feature | Status | Notes |
 |---|---|---|
-| 30 m fine-grid reprojection | Not implemented | Working at CHELSA ~1 km; processing chain is resolution-agnostic |
-| `exactextract` pixel-exact zonal stats | Not implemented | Using centroid-based `aggregate_spatial`; negligible difference at 1 km vs. district scale |
-| CHAP-CSV column naming (`period`, `org_unit_id`) | Not implemented | Columns are `t`, `geometry`, `hotspot`; needs a thin adapter for DHIS2 import |
+| `exactextract` pixel-exact zonal stats | Not implemented | Using centroid-based `aggregate_spatial`; negligible difference at 30 m vs. district scale |
+| CHAP-CSV column naming (`period`, `org_unit_id`) | Not implemented | Columns are `geometry`, `hotspot`; needs a thin adapter for DHIS2 import |
+
+---
+
+## End-to-end test results — Rwanda, Jan–Mar 2018
+
+Run 2026-06-06 on the Rwanda instance (`bbox: [28.8, -2.9, 30.9, -1.0]`).
+
+### Workflow 1: Mosquito Hotspot Raster
+
+| Item | Value |
+|---|---|
+| Grid | 6 841 × 7 561 pixels at ~31 m |
+| Hotspot pixels (top 10 %) | 1 508 134 of 51 724 801 (2.9 %) |
+| Output | `mosquito_hotspots.zarr` — plain Zarr, 4-level pyramid |
+| Temporal input | CHELSA monthly mean temperature Jan–Mar 2018 |
+| Elevation | Copernicus DEM GLO-30 (native 30 m) |
+
+### Workflow 2: District hotspot fractions
+
+All 30 Rwanda ADM2 districts, sorted by hotspot fraction (descending):
+
+| District | Hotspot fraction |
+|---|---|
+| Kicukiro | 0.2871 |
+| Nyarugenge | 0.1722 |
+| Nyagatare | 0.1475 |
+| Rusizi | 0.1410 |
+| Rwamagana | 0.1179 |
+| Kirehe | 0.1109 |
+| Gasabo | 0.1105 |
+| Ngoma | 0.0947 |
+| Gisagara | 0.0813 |
+| Gatsibo | 0.0778 |
+| Rubavu | 0.0704 |
+| Bugesera | 0.0642 |
+| Musanze | 0.0631 |
+| Kayonza | 0.0592 |
+| Nyamasheke | 0.0358 |
+| Nyanza | 0.0350 |
+| Kamonyi | 0.0309 |
+| Ruhango | 0.0230 |
+| Huye | 0.0192 |
+| Burera | 0.0191 |
+| Rulindo | 0.0124 |
+| Gicumbi | 0.0084 |
+| Rutsiro | 0.0063 |
+| Gakenke | 0.0059 |
+| Karongi | 0.0057 |
+| Muhanga | 0.0056 |
+| Nyabihu | 0.0051 |
+| Ngororero | 0.0018 |
+| Nyamagabe | 0.0006 |
+| Nyaruguru | 0.0005 |
+
+The Kigali urban districts (Kicukiro, Nyarugenge, Gasabo) and the eastern lowlands (Nyagatare, Rwamagana, Kirehe, Gatsibo) rank highest — consistent with higher temperatures, lower elevations, and larger agricultural wetland areas. The Albertine Rift highlands (Nyaruguru, Nyamagabe, Ngororero) rank lowest, reflecting cooler temperatures and less suitable breeding habitat.
