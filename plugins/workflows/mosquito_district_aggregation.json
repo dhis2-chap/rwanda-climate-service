@@ -1,0 +1,68 @@
+{
+  "id": "mosquito_district_aggregation",
+  "summary": "Aggregate published hotspot raster to district-level CSV for CHAP",
+  "description": "Loads a published mosquito hotspot collection from the managed store, computes the mean hotspot fraction per administrative district, and exports a CSV. Intended to run after mosquito_hotspot_raster has published a collection. The CSV output has columns: t (period), geometry (district shapeID), hotspot (fraction of hotspot pixels in that district).",
+  "parameters": [
+    {
+      "name": "collection_id",
+      "description": "ID of the published hotspot raster collection to aggregate, e.g. \"mosquito_hotspots\"",
+      "schema": {"type": "string"}
+    },
+    {
+      "name": "temporal_extent",
+      "description": "Time range to load, must match what was published, e.g. [\"2018-01-01\", \"2018-04-01\"]",
+      "schema": {"type": "array"}
+    },
+    {
+      "name": "geometries",
+      "description": "GeoJSON FeatureCollection of administrative units. Rwanda ADM2 districts are bundled at plugins/data/rwanda_districts.geojson.",
+      "schema": {"type": "object"}
+    },
+    {
+      "name": "district_ids",
+      "description": "List of identifiers matching the features in geometries, used as labels in the CSV geometry column.",
+      "schema": {"type": "array"}
+    }
+  ],
+  "process_graph": {
+    "load_hotspots": {
+      "process_id": "load_collection",
+      "arguments": {
+        "id": {"from_parameter": "collection_id"},
+        "temporal_extent": {"from_parameter": "temporal_extent"}
+      }
+    },
+    "aggregate": {
+      "process_id": "aggregate_spatial",
+      "arguments": {
+        "data": {"from_node": "load_hotspots"},
+        "geometries": {"from_parameter": "geometries"},
+        "reducer": {
+          "process_graph": {
+            "mean": {
+              "process_id": "mean",
+              "arguments": {"data": {"from_parameter": "data"}},
+              "result": true
+            }
+          }
+        }
+      }
+    },
+    "label_districts": {
+      "process_id": "rename_labels",
+      "arguments": {
+        "data": {"from_node": "aggregate"},
+        "dimension": "geometry",
+        "target": {"from_parameter": "district_ids"}
+      }
+    },
+    "export": {
+      "process_id": "save_result",
+      "arguments": {
+        "data": {"from_node": "label_districts"},
+        "format": "CSV"
+      },
+      "result": true
+    }
+  }
+}

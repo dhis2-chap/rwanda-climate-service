@@ -1,7 +1,7 @@
 {
-  "id": "mosquito_suitability",
-  "summary": "Mosquito suitability, exposure, and hotspot pipeline",
-  "description": "Full chap-GIS pipeline: lapse-rate-corrected temperature-based suitability, elevation-adjusted distance-decay exposure to breeding sites, population-weighted hotspot identification, and spatial aggregation to administrative units.",
+  "id": "mosquito_hotspot_raster",
+  "summary": "Compute and publish mosquito hotspot raster to managed store",
+  "description": "Runs the full chap-GIS raster pipeline — lapse-rate-corrected temperature suitability, elevation-adjusted distance-decay exposure, population-weighted hotspot classification — and writes the result to the managed Icechunk store so it appears as a STAC collection. Run this first, then use mosquito_district_aggregation to produce the CHAP CSV.",
   "parameters": [
     {
       "name": "temporal_extent",
@@ -9,16 +9,9 @@
       "schema": {"type": "array"}
     },
     {
-      "name": "geometries",
-      "description": "GeoJSON FeatureCollection of administrative units for aggregation. Defaults to Rwanda ADM2 districts from GeoBoundaries when omitted.",
-      "schema": {"type": "object"},
-      "optional": true
-    },
-    {
-      "name": "district_ids",
-      "description": "List of district identifiers matching the features in geometries, used as geometry-dimension labels in the output CSV.",
-      "schema": {"type": "array"},
-      "optional": true
+      "name": "dataset_id",
+      "description": "ID to assign the published collection, e.g. \"mosquito_hotspots\"",
+      "schema": {"type": "string"}
     }
   ],
   "process_graph": {
@@ -31,21 +24,15 @@
     },
     "load_elevation": {
       "process_id": "load_collection",
-      "arguments": {
-        "id": "nasadem_elevation"
-      }
+      "arguments": {"id": "nasadem_elevation"}
     },
     "load_landcover": {
       "process_id": "load_collection",
-      "arguments": {
-        "id": "esa_worldcover_2021"
-      }
+      "arguments": {"id": "esa_worldcover_2021"}
     },
     "load_rice": {
       "process_id": "load_collection",
-      "arguments": {
-        "id": "africa_rice_fields_2023"
-      }
+      "arguments": {"id": "africa_rice_fields_2023"}
     },
     "load_population": {
       "process_id": "load_collection",
@@ -87,9 +74,7 @@
     },
     "compute_suitability": {
       "process_id": "suitability",
-      "arguments": {
-        "temperature": {"from_node": "mean_temperature"}
-      }
+      "arguments": {"temperature": {"from_node": "mean_temperature"}}
     },
     "compute_exposure": {
       "process_id": "exposure",
@@ -108,35 +93,15 @@
         "percentile": 90.0
       }
     },
-    "aggregate": {
-      "process_id": "aggregate_spatial",
-      "arguments": {
-        "data": {"from_node": "compute_hotspots"},
-        "geometries": {"from_parameter": "geometries"},
-        "reducer": {
-          "process_graph": {
-            "mean": {
-              "process_id": "mean",
-              "arguments": {"data": {"from_parameter": "data"}},
-              "result": true
-            }
-          }
-        }
-      }
-    },
-    "label_districts": {
-      "process_id": "rename_labels",
-      "arguments": {
-        "data": {"from_node": "aggregate"},
-        "dimension": "geometry",
-        "target": {"from_parameter": "district_ids"}
-      }
-    },
-    "export": {
+    "save": {
       "process_id": "save_result",
       "arguments": {
-        "data": {"from_node": "label_districts"},
-        "format": "CSV"
+        "data": {"from_node": "compute_hotspots"},
+        "format": "Zarr",
+        "options": {
+          "dataset_id": {"from_parameter": "dataset_id"},
+          "variable": "hotspot"
+        }
       },
       "result": true
     }
