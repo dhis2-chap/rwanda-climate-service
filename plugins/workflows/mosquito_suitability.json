@@ -1,32 +1,38 @@
 {
   "id": "mosquito_suitability",
   "summary": "Mosquito suitability, exposure, and hotspot pipeline",
-  "description": "Full chap-GIS pipeline: temperature-based suitability, distance-decay exposure to breeding sites, population-weighted hotspot identification, and spatial aggregation to administrative units. Requires ERA5-Land or CHELSA temperature, ESA WorldCover, rice fields, and WorldPop population.",
+  "description": "Full chap-GIS pipeline: lapse-rate-corrected temperature-based suitability, elevation-adjusted distance-decay exposure to breeding sites, population-weighted hotspot identification, and spatial aggregation to administrative units.",
   "parameters": [
     {
       "name": "temporal_extent",
-      "description": "Time range to process, e.g. [\"2020-01-01\", \"2020-12-31\"]",
+      "description": "Time range to process, e.g. [\"2018-01-01\", \"2018-04-01\"]",
       "schema": {"type": "array"}
     },
     {
-      "name": "data_element_id",
-      "description": "DHIS2 data element UID for export",
-      "schema": {"type": "string"}
+      "name": "geometries",
+      "description": "GeoJSON FeatureCollection of administrative units for aggregation. Defaults to Rwanda ADM2 districts from GeoBoundaries when omitted.",
+      "schema": {"type": "object"},
+      "optional": true
     },
     {
-      "name": "org_unit_field",
-      "description": "Field name containing DHIS2 org unit UIDs after spatial aggregation",
-      "schema": {"type": "string"},
-      "optional": true,
-      "default": "geometry"
+      "name": "district_ids",
+      "description": "List of district identifiers matching the features in geometries, used as geometry-dimension labels in the output CSV.",
+      "schema": {"type": "array"},
+      "optional": true
     }
   ],
   "process_graph": {
     "load_temperature": {
       "process_id": "load_collection",
       "arguments": {
-        "id": "era5land_temperature_monthly",
+        "id": "chelsa_temperature_monthly",
         "temporal_extent": {"from_parameter": "temporal_extent"}
+      }
+    },
+    "load_elevation": {
+      "process_id": "load_collection",
+      "arguments": {
+        "id": "nasadem_elevation"
       }
     },
     "load_landcover": {
@@ -48,18 +54,50 @@
         "temporal_extent": {"from_parameter": "temporal_extent"}
       }
     },
+    "lc_2d": {
+      "process_id": "reduce_dimension",
+      "arguments": {
+        "data": {"from_node": "load_landcover"},
+        "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}},
+        "dimension": "t"
+      }
+    },
+    "rice_2d": {
+      "process_id": "reduce_dimension",
+      "arguments": {
+        "data": {"from_node": "load_rice"},
+        "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}},
+        "dimension": "t"
+      }
+    },
+    "correct_temperature": {
+      "process_id": "lapse_rate_downscale",
+      "arguments": {
+        "temperature": {"from_node": "load_temperature"},
+        "elevation": {"from_node": "load_elevation"}
+      }
+    },
+    "mean_temperature": {
+      "process_id": "reduce_dimension",
+      "arguments": {
+        "data": {"from_node": "correct_temperature"},
+        "reducer": {"process_graph": {"mean": {"process_id": "mean", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}},
+        "dimension": "t"
+      }
+    },
     "compute_suitability": {
       "process_id": "suitability",
       "arguments": {
-        "temperature": {"from_node": "load_temperature"}
+        "temperature": {"from_node": "mean_temperature"}
       }
     },
     "compute_exposure": {
       "process_id": "exposure",
       "arguments": {
         "suitability": {"from_node": "compute_suitability"},
-        "landcover": {"from_node": "load_landcover"},
-        "rice": {"from_node": "load_rice"}
+        "landcover": {"from_node": "lc_2d"},
+        "rice": {"from_node": "rice_2d"},
+        "elevation": {"from_node": "load_elevation"}
       }
     },
     "compute_hotspots": {
@@ -74,7 +112,7 @@
       "process_id": "aggregate_spatial",
       "arguments": {
         "data": {"from_node": "compute_hotspots"},
-        "geometries": null,
+        "geometries": {"from_parameter": "geometries"},
         "reducer": {
           "process_graph": {
             "mean": {
@@ -86,16 +124,19 @@
         }
       }
     },
+    "label_districts": {
+      "process_id": "rename_labels",
+      "arguments": {
+        "data": {"from_node": "aggregate"},
+        "dimension": "geometry",
+        "target": {"from_parameter": "district_ids"}
+      }
+    },
     "export": {
       "process_id": "save_result",
       "arguments": {
-        "data": {"from_node": "aggregate"},
-        "format": "CHAPCSV",
-        "options": {
-          "data_element_id": {"from_parameter": "data_element_id"},
-          "org_unit_field": {"from_parameter": "org_unit_field"},
-          "period_type": "monthly"
-        }
+        "data": {"from_node": "label_districts"},
+        "format": "CSV"
       },
       "result": true
     }

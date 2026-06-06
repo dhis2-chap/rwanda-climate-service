@@ -1,0 +1,13 @@
+- id: mosquito_hotspots
+  name: Mosquito hotspots (Rwanda 2018 Q1)
+  short_name: Mosquito hotspots
+  variable: hotspot
+  period_type: monthly
+  sync:
+    kind: static
+  units: "1"
+  display:
+    colormap: YlOrRd
+    range: [0.0, 1.0]
+    nodata: 0.0
+

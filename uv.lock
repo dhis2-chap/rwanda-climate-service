@@ -2114,7 +2114,7 @@ wheels = [
 [[package]]
 name = "open-climate-service"
 version = "0.1.0a1"
-source = { git = "https://github.com/dhis2/open-climate-service.git?branch=fix%2Fstreaming-pyramid-support#e62ff7e0be16be7aeb56fa45ff0f9cfce2470176" }
+source = { git = "https://github.com/dhis2/open-climate-service.git?branch=feat%2Fopeneo-save-result-managed-store#942ef2841fe62e3adaa407ef99c738c18566af44" }
 dependencies = [
     { name = "dhis2eo" },
     { name = "fastapi" },
@@ -3256,7 +3256,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "open-climate-service", git = "https://github.com/dhis2/open-climate-service.git?branch=fix%2Fstreaming-pyramid-support" },
+    { name = "open-climate-service", git = "https://github.com/dhis2/open-climate-service.git?branch=feat%2Fopeneo-save-result-managed-store" },
     { name = "s3fs", specifier = ">=2026.4.0" },
 ]
 

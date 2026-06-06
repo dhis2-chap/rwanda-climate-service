@@ -8,6 +8,22 @@ import xarray as xr
 from open_climate_service.process import process
 
 
+def _to_spatial_only(da: xr.DataArray) -> xr.DataArray:
+    """Return a 2-D (y, x) slice by dropping any size-1 non-spatial dims.
+
+    Population rasters typically have a yearly time axis that doesn't match
+    the monthly exposure grid.  Collapse to (y, x) before spatial alignment.
+    """
+    for dim in list(da.dims):
+        if dim not in ("y", "x") and da.sizes[dim] == 1:
+            da = da.isel({dim: 0}, drop=True)
+    # If multiple time steps remain, take the last (most recent year).
+    for dim in list(da.dims):
+        if dim not in ("y", "x"):
+            da = da.isel({dim: -1}, drop=True)
+    return da
+
+
 @process(
     summary="Identify high-risk hotspot areas from population exposure",
     description=(
@@ -37,8 +53,14 @@ def hotspots(
     xr.DataArray
         Binary mask: 1 = hotspot, 0 = non-hotspot, same grid as inputs.
     """
-    if population.shape != exposure.shape:
-        population = population.interp_like(exposure, method="nearest")
+    # Population rasters carry a time axis (yearly) that differs from the
+    # monthly exposure grid — collapse to (y, x) first.
+    population = _to_spatial_only(population)
+
+    # Spatially align to the exposure grid using a time-free reference slice.
+    ref = exposure.isel(t=0, drop=True) if "t" in exposure.dims else exposure
+    if population.shape != ref.shape:
+        population = population.interp_like(ref, method="nearest")
 
     pop_exp = (population.values * exposure.values).astype("float32")
     nonzero = pop_exp[pop_exp > 0]

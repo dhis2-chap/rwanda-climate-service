@@ -1,0 +1,25 @@
+- id: nasadem_elevation
+  name: NASADEM 30m elevation (NASA/JPL)
+  short_name: Elevation
+  variable: elevation
+  period_type: yearly
+  sync:
+    kind: temporal
+    execution: append
+  extents:
+    spatial:
+      bbox: [-180, -56, 180, 60]
+    temporal:
+      begin: "2000"
+      end: "2000"
+      resolution: P1Y
+  ingestion:
+    plugin: datasets.elevation.ElevationPlugin
+    params: {}
+  units: m
+  resolution: ~30 m (1 arc-second)
+  source: Copernicus DEM GLO-30 (ESA / AWS Open Data)
+  source_url: https://registry.opendata.aws/copernicus-dem/
+  display:
+    colormap: terrain
+    range: [0, 4500]
