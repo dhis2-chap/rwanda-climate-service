@@ -62,6 +62,23 @@
       }
     },
 
+    "lc_30m": {
+      "process_id": "resample_cube_spatial",
+      "arguments": {
+        "data": {"from_node": "lc_2d"},
+        "target": {"from_node": "load_elevation"},
+        "method": "near"
+      }
+    },
+    "rice_30m": {
+      "process_id": "resample_cube_spatial",
+      "arguments": {
+        "data": {"from_node": "rice_2d"},
+        "target": {"from_node": "load_elevation"},
+        "method": "near"
+      }
+    },
+
     "correct_temperature": {
       "process_id": "lapse_rate_downscale",
       "arguments": {
@@ -86,31 +103,17 @@
     "compute_breeding_mask": {
       "process_id": "breeding_site_mask",
       "arguments": {
-        "landcover": {"from_node": "lc_2d"},
-        "rice": {"from_node": "rice_2d"}
-      }
-    },
-    "breeding_mask_30m": {
-      "process_id": "resample_cube_spatial",
-      "arguments": {
-        "data": {"from_node": "compute_breeding_mask"},
-        "target": {"from_node": "load_elevation"},
-        "method": "near"
-      }
-    },
-    "compute_exposure": {
-      "process_id": "exposure",
-      "arguments": {
-        "breeding_mask": {"from_node": "breeding_mask_30m"},
-        "elevation": {"from_node": "load_elevation"}
+        "landcover": {"from_node": "lc_30m"},
+        "rice": {"from_node": "rice_30m"}
       }
     },
 
-    "weighted_exposure": {
-      "process_id": "multiply_cubes",
+    "compute_exposure": {
+      "process_id": "exposure",
       "arguments": {
-        "x": {"from_node": "compute_suitability"},
-        "y": {"from_node": "compute_exposure"}
+        "breeding_mask": {"from_node": "compute_breeding_mask"},
+        "elevation": {"from_node": "load_elevation"},
+        "suitability": {"from_node": "compute_suitability"}
       }
     },
 
@@ -118,7 +121,7 @@
       "process_id": "resample_cube_spatial",
       "arguments": {
         "data": {"from_node": "pop_2d"},
-        "target": {"from_node": "weighted_exposure"},
+        "target": {"from_node": "compute_exposure"},
         "method": "near"
       }
     },
@@ -126,7 +129,7 @@
       "process_id": "multiply_cubes",
       "arguments": {
         "x": {"from_node": "pop_aligned"},
-        "y": {"from_node": "weighted_exposure"}
+        "y": {"from_node": "compute_exposure"}
       }
     },
 

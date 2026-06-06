@@ -14,7 +14,7 @@ The pipeline is identical in concept to yours. This document explains the mappin
 | `suitability.thermal_suitability` | `suitability` | `plugins/processes/suitability.py` |
 | `landcover.breeding_site_mask` | `breeding_site_mask` | `plugins/processes/breeding_site_mask.py` |
 | `exposure.exposure` | `exposure` | `plugins/processes/exposure.py` |
-| `pop_exposure = population × exposure` | `multiply_cubes` × 2 + `resample_cube_spatial` | process graph (built-in + thin wrapper) |
+| `pop_exposure = population × exposure` | `multiply_cubes` + `resample_cube_spatial` | process graph (built-in + thin wrapper) |
 | `hotspots.identify_hotspots` | `hotspots` | `plugins/processes/hotspots.py` |
 | `aggregate.aggregate_to_admin` | `aggregate_spatial` | framework built-in |
 
@@ -63,8 +63,8 @@ At 30 m, Rwanda is ~7 500 × 6 800 pixels (~51 M pixels). The distance transform
 ### Aggregation method
 chap-GIS uses `exactextract` for exact pixel-in-polygon weighting. This implementation uses openEO's `aggregate_spatial`, which uses centroid-based assignment. For the ~1 km pixel size relative to Rwanda district areas (median ~400 km²), the difference is negligible.
 
-### Annual mean vs. per-month TPC
-chap-GIS computes an annual mean temperature first, then applies the TPC once. Here we apply the TPC per month and then take the mean suitability. For a symmetric Gaussian this is mathematically equivalent as long as the mean is taken before the hotspot classification. The per-month path preserves seasonal variation if you later want month-by-month hotspot maps.
+### Annual mean temperature
+Both chap-GIS and this implementation compute the temporal mean temperature first, then apply the TPC once. In the process graph: `reduce_dimension(correct_temperature, t, mean)` → `suitability(mean_temperature)`. The TPC is not applied per month.
 
 ### Output format
 chap-GIS writes a CHAP-compatible CSV directly. Here we use the framework's standard CSV format: columns `t`, `geometry` (district shapeID), `hotspot` (fraction). A thin adapter mapping `shapeID` → DHIS2 org-unit UID can translate this for DHIS2 import.
@@ -116,18 +116,18 @@ JOB=$(curl -s -X POST http://localhost:8000/jobs \
       "load_landcover":         {"process_id": "load_collection",      "arguments": {"id": "esa_worldcover_2021"}},
       "load_rice":              {"process_id": "load_collection",      "arguments": {"id": "africa_rice_fields_2023"}},
       "load_population":        {"process_id": "load_collection",      "arguments": {"id": "worldpop_population_yearly", "temporal_extent": ["2018-01-01","2018-12-31"]}},
-      "lc_2d":   {"process_id": "reduce_dimension", "arguments": {"data": {"from_node": "load_landcover"}, "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
-      "rice_2d": {"process_id": "reduce_dimension", "arguments": {"data": {"from_node": "load_rice"},      "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
-      "pop_2d":  {"process_id": "reduce_dimension", "arguments": {"data": {"from_node": "load_population"},"reducer": {"process_graph": {"last":  {"process_id": "last",  "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
+      "lc_2d":                  {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_landcover"}, "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
+      "rice_2d":                {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_rice"},      "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
+      "pop_2d":                 {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_population"},"reducer": {"process_graph": {"last":  {"process_id": "last",  "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
+      "lc_30m":                 {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "lc_2d"},   "target": {"from_node": "load_elevation"}, "method": "near"}},
+      "rice_30m":               {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "rice_2d"}, "target": {"from_node": "load_elevation"}, "method": "near"}},
       "correct_temperature":    {"process_id": "lapse_rate_downscale", "arguments": {"temperature": {"from_node": "load_temperature"}, "elevation": {"from_node": "load_elevation"}}},
       "mean_temperature":       {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "correct_temperature"}, "reducer": {"process_graph": {"mean": {"process_id": "mean", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
       "compute_suitability":    {"process_id": "suitability",          "arguments": {"temperature": {"from_node": "mean_temperature"}}},
-      "compute_breeding_mask":  {"process_id": "breeding_site_mask",   "arguments": {"landcover": {"from_node": "lc_2d"}, "rice": {"from_node": "rice_2d"}}},
-      "breeding_mask_30m":      {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "compute_breeding_mask"}, "target": {"from_node": "load_elevation"}, "method": "near"}},
-      "compute_exposure":       {"process_id": "exposure",             "arguments": {"breeding_mask": {"from_node": "breeding_mask_30m"}, "elevation": {"from_node": "load_elevation"}}},
-      "weighted_exposure":      {"process_id": "multiply_cubes",       "arguments": {"x": {"from_node": "compute_suitability"}, "y": {"from_node": "compute_exposure"}}},
-      "pop_aligned":            {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "pop_2d"}, "target": {"from_node": "weighted_exposure"}, "method": "near"}},
-      "pop_exposure":           {"process_id": "multiply_cubes",       "arguments": {"x": {"from_node": "pop_aligned"}, "y": {"from_node": "weighted_exposure"}}},
+      "compute_breeding_mask":  {"process_id": "breeding_site_mask",   "arguments": {"landcover": {"from_node": "lc_30m"}, "rice": {"from_node": "rice_30m"}}},
+      "compute_exposure":       {"process_id": "exposure",             "arguments": {"breeding_mask": {"from_node": "compute_breeding_mask"}, "elevation": {"from_node": "load_elevation"}, "suitability": {"from_node": "compute_suitability"}}},
+      "pop_aligned":            {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "pop_2d"}, "target": {"from_node": "compute_exposure"}, "method": "near"}},
+      "pop_exposure":           {"process_id": "multiply_cubes",       "arguments": {"x": {"from_node": "pop_aligned"}, "y": {"from_node": "compute_exposure"}}},
       "compute_hotspots":       {"process_id": "hotspots",             "arguments": {"pop_exposure": {"from_node": "pop_exposure"}, "percentile": 90.0}},
       "save":                   {"process_id": "save_result",          "arguments": {"data": {"from_node": "compute_hotspots"}, "format": "Zarr", "options": {"dataset_id": "mosquito_hotspots", "variable": "hotspot"}}, "result": true}
     }}
@@ -194,17 +194,17 @@ Source: [`plugins/processes/breeding_site_mask.py`](plugins/processes/breeding_s
 
 ### `exposure`
 
-Takes the pre-computed breeding mask instead of raw landcover + rice. The NaN-encoding of water pixels in the breeding mask is the water mask: no extra parameter needed.
+Takes the pre-computed breeding mask (at 30 m, after resampling WorldCover) plus optional elevation and suitability. Matches chap-GIS exactly: suitability is looked up **at the nearest breeding site**, not at each pixel. This means a pixel far from a thermally suitable breeding site gets lower exposure, which is the correct causal model.
 
 ```
-exposure(x) = exp(−d(x) / λ) × exp(−max(Δz(x), 0) / γ)
+exposure(x) = exp(−d(x) / λ) × exp(−max(Δz(x), 0) / γ) × S(T_{nearest breeding site})
 ```
 
-No suitability input — the `suitability × exposure` multiplication is done explicitly in the process graph with `multiply_cubes`. Source: [`plugins/processes/exposure.py`](plugins/processes/exposure.py)
+Source: [`plugins/processes/exposure.py`](plugins/processes/exposure.py)
 
 ### `multiply_cubes`
 
-Thin wrapper for element-wise multiplication of two spatially aligned DataArrays. Used twice in the process graph: `suitability × exposure` → `weighted_exposure`, and `population × weighted_exposure` → `pop_exposure`. Source: [`plugins/processes/multiply_cubes.py`](plugins/processes/multiply_cubes.py)
+Thin wrapper for element-wise multiplication of two spatially aligned DataArrays. Used once in the process graph: `population × exposure` → `pop_exposure`. Source: [`plugins/processes/multiply_cubes.py`](plugins/processes/multiply_cubes.py)
 
 ### `hotspots`
 
