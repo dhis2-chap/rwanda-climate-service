@@ -36,7 +36,7 @@ def _to_spatial_only(da: xr.DataArray) -> xr.DataArray:
 def exposure(
     breeding_mask: xr.DataArray,
     elevation: xr.DataArray | None = None,
-    pixel_size_m: float = 1000.0,
+    pixel_size_m: float | None = None,
 ) -> xr.DataArray:
     """Distance-decay exposure kernel from mosquito breeding sites.
 
@@ -50,7 +50,9 @@ def exposure(
         decay term exp(−max(Δz, 0) / γ) is applied using the elevation of
         the nearest breeding site as the reference.
     pixel_size_m:
-        Pixel size in metres for horizontal distance computation.
+        Pixel size in metres for horizontal distance computation.  Inferred
+        from the breeding_mask x-coordinate spacing when not provided
+        (assumes WGS-84 / equatorial approximation: 1° ≈ 111 320 m).
 
     Returns
     -------
@@ -59,6 +61,13 @@ def exposure(
         Permanent-water pixels are NaN.
     """
     from scipy.ndimage import distance_transform_edt
+
+    if pixel_size_m is None:
+        if breeding_mask.x.size > 1:
+            dx_deg = float(abs(float(breeding_mask.x[1]) - float(breeding_mask.x[0])))
+            pixel_size_m = dx_deg * 111_320.0
+        else:
+            pixel_size_m = 30.0
 
     if elevation is not None:
         elevation = _to_spatial_only(elevation)

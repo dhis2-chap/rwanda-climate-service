@@ -56,13 +56,9 @@ All defaults match chap-GIS exactly.
 ## Key differences
 
 ### Resolution
-chap-GIS targets 30 m by reprojecting everything to a fine DEM grid. This implementation works at CHELSA's native ~1 km (30 arc-seconds). At 1 km, Rwanda is ~228×252 pixels — manageable for a national service.
+Both chap-GIS and this implementation target the Copernicus DEM GLO-30 (~30 m / 1 arc-second) as the reference grid. Temperature (CHELSA, ~1 km) is bilinearly interpolated up to the 30 m grid by `lapse_rate_downscale`. WorldCover (10 m) and rice fields (20 m) are produced at their native resolution by `breeding_site_mask`, then resampled to the 30 m DEM grid with `resample_cube_spatial` before the distance-decay `exposure` step. WorldPop (100 m) is resampled to the 30 m grid before the population × exposure multiplication.
 
-The Copernicus DEM GLO-30 is ingested at 30 arc-seconds (~1 km) — the same grid as CHELSA — rather than at its native 1 arc-second (~30 m). This keeps the entire pipeline at 1 km. The lapse-rate correction is structurally present but has near-zero effect at the same resolution (actual vs. reference elevation within a 1 km cell are the same value); sub-kilometre terrain variation is averaged out.
-
-The vertical decay in `exposure` likewise operates at 1 km. The physics is the same; only the spatial detail differs.
-
-To run at 30 m, reingest elevation with `_RESOLUTION_DEG = 1/3600` and accept the ~900× larger array size.
+At 30 m, Rwanda is ~7 500 × 6 800 pixels (~51 M pixels). The distance transform dominates compute time; expect a few minutes per run. This matches chap-GIS's processing profile.
 
 ### Aggregation method
 chap-GIS uses `exactextract` for exact pixel-in-polygon weighting. This implementation uses openEO's `aggregate_spatial`, which uses centroid-based assignment. For the ~1 km pixel size relative to Rwanda district areas (median ~400 km²), the difference is negligible.
@@ -127,7 +123,8 @@ JOB=$(curl -s -X POST http://localhost:8000/jobs \
       "mean_temperature":       {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "correct_temperature"}, "reducer": {"process_graph": {"mean": {"process_id": "mean", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
       "compute_suitability":    {"process_id": "suitability",          "arguments": {"temperature": {"from_node": "mean_temperature"}}},
       "compute_breeding_mask":  {"process_id": "breeding_site_mask",   "arguments": {"landcover": {"from_node": "lc_2d"}, "rice": {"from_node": "rice_2d"}}},
-      "compute_exposure":       {"process_id": "exposure",             "arguments": {"breeding_mask": {"from_node": "compute_breeding_mask"}, "elevation": {"from_node": "load_elevation"}}},
+      "breeding_mask_30m":      {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "compute_breeding_mask"}, "target": {"from_node": "load_elevation"}, "method": "near"}},
+      "compute_exposure":       {"process_id": "exposure",             "arguments": {"breeding_mask": {"from_node": "breeding_mask_30m"}, "elevation": {"from_node": "load_elevation"}}},
       "weighted_exposure":      {"process_id": "multiply_cubes",       "arguments": {"x": {"from_node": "compute_suitability"}, "y": {"from_node": "compute_exposure"}}},
       "pop_aligned":            {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "pop_2d"}, "target": {"from_node": "weighted_exposure"}, "method": "near"}},
       "pop_exposure":           {"process_id": "multiply_cubes",       "arguments": {"x": {"from_node": "pop_aligned"}, "y": {"from_node": "weighted_exposure"}}},

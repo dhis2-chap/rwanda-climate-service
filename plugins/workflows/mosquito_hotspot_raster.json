@@ -90,10 +90,18 @@
         "rice": {"from_node": "rice_2d"}
       }
     },
+    "breeding_mask_30m": {
+      "process_id": "resample_cube_spatial",
+      "arguments": {
+        "data": {"from_node": "compute_breeding_mask"},
+        "target": {"from_node": "load_elevation"},
+        "method": "near"
+      }
+    },
     "compute_exposure": {
       "process_id": "exposure",
       "arguments": {
-        "breeding_mask": {"from_node": "compute_breeding_mask"},
+        "breeding_mask": {"from_node": "breeding_mask_30m"},
         "elevation": {"from_node": "load_elevation"}
       }
     },

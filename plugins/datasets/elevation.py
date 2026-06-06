@@ -21,10 +21,7 @@ from open_climate_service.streaming.protocol import GridSpec
 
 _BUCKET = "copernicus-dem-30m"
 _REGION = "us-east-1"
-# Store elevation at CHELSA resolution (~30 arc-seconds ≈ 1 km at the equator) so that
-# lapse_rate_downscale operates on the same grid as temperature rather than upsampling
-# the entire pipeline to the native 1 arc-second (~30 m) DEM resolution.
-_RESOLUTION_DEG = 1 / 120   # 30 arc-seconds ≈ 1 km
+_RESOLUTION_DEG = 1 / 3600   # 1 arc-second ≈ 30 m (native Copernicus DEM GLO-30 resolution)
 _CACHE = Path.home() / ".cache" / "chap-gis" / "copernicus-dem-30m"
 
 
