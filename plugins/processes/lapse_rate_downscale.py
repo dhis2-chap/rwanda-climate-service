@@ -45,32 +45,61 @@ def lapse_rate_downscale(
     xr.DataArray
         Temperature in °C on the elevation grid, corrected for actual elevation.
     """
-    # Squeeze time-dim from static elevation so interp_like sees only (y, x)
+    import numpy as _np
+    # Squeeze time-dim from static elevation so interp sees only (y, x)
     elev_2d = elevation
     for dim in list(elev_2d.dims):
         if dim not in ("y", "x") and elev_2d.sizes[dim] == 1:
             elev_2d = elev_2d.isel({dim: 0}, drop=True)
 
-    # Reference elevation: DEM resampled to the coarse temperature grid
-    elev_coarse = elev_2d.interp_like(
-        temperature.isel(t=0, drop=True) if "t" in temperature.dims else temperature,
-        method="linear",
-    )
+    elev_y = elev_2d.y.values   # target fine-grid y coords
+    elev_x = elev_2d.x.values   # target fine-grid x coords
 
-    # Interpolate temperature to the elevation grid
-    temp_interp = temperature.interp_like(elev_2d, method="linear")
+    # Coarse temperature grid coords (for reference elevation)
+    temp_1d = temperature.isel(t=0, drop=True) if "t" in temperature.dims else temperature
+    temp_y = temp_1d.y.values
+    temp_x = temp_1d.x.values
 
-    # Lapse-rate correction: higher than coarse reference → cooler
-    elev_fine_broadcast = elev_2d
-    if "t" in temp_interp.dims:
-        elev_fine_broadcast = elev_2d.expand_dims(t=temp_interp.t)
-        elev_coarse = elev_coarse.expand_dims(t=temp_interp.t)
+    # All numpy from here to avoid xarray's grid-alignment join on y/x, which
+    # would intersect elevation coords with temperature coords and yield 0 points.
 
-    corrected = (
-        temp_interp - lapse_rate * (elev_fine_broadcast - elev_coarse)
-    ).astype("float32")
+    # 1. Reference elevation: fine DEM → coarse temperature grid → back to fine grid.
+    #    This is what CHELSA "assumed" about the terrain at each CHELSA pixel,
+    #    then upsampled to the full-resolution output.
+    elev_fine_np = elev_2d.values.astype("float32")       # (ny_fine, nx_fine)
+    elev_coarse_tmp = elev_2d.interp(y=temp_y, x=temp_x, method="linear")  # (ny_coarse, nx_coarse)
+    elev_coarse_fine = elev_coarse_tmp.interp(y=elev_y, x=elev_x, method="linear")  # back to fine
+    elev_coarse_np = elev_coarse_fine.values.astype("float32")  # (ny_fine, nx_fine)
 
-    corrected.attrs = dict(temperature.attrs)
+    # Elevation anomaly (fine − coarse): positive where actual terrain > CHELSA reference
+    delta_elev = elev_fine_np - elev_coarse_np   # (ny_fine, nx_fine)
+
+    # 2. Interpolate temperature to the fine grid, slice-by-slice.
+    if "t" in temperature.dims:
+        n_t = temperature.sizes["t"]
+        temp_fine_np = _np.full((n_t, len(elev_y), len(elev_x)), _np.nan, dtype="float32")
+        for i in range(n_t):
+            sl = temperature.isel(t=i, drop=True).interp(y=elev_y, x=elev_x, method="linear")
+            temp_fine_np[i] = sl.values.astype("float32")
+
+        # 3. Lapse-rate correction (all numpy; delta_elev broadcast over t)
+        corrected_np = (temp_fine_np - lapse_rate * delta_elev[_np.newaxis]).astype("float32")
+        corrected = xr.DataArray(
+            corrected_np,
+            dims=["t", "y", "x"],
+            coords={"t": temperature.t.values, "y": elev_y, "x": elev_x},
+            attrs=dict(temperature.attrs),
+        )
+    else:
+        temp_fine_np = temperature.interp(y=elev_y, x=elev_x, method="linear").values.astype("float32")
+        corrected_np = (temp_fine_np - lapse_rate * delta_elev).astype("float32")
+        corrected = xr.DataArray(
+            corrected_np,
+            dims=["y", "x"],
+            coords={"y": elev_y, "x": elev_x},
+            attrs=dict(temperature.attrs),
+        )
+
     corrected.attrs["long_name"] = corrected.attrs.get("long_name", "temperature") + " (lapse-rate corrected)"
     corrected.attrs["lapse_rate_K_per_m"] = lapse_rate
     return corrected

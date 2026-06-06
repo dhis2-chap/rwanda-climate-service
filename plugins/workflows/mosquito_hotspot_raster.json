@@ -6,153 +6,259 @@
     {
       "name": "temporal_extent",
       "description": "Time range to process, e.g. [\"2018-01-01\", \"2018-04-01\"]",
-      "schema": {"type": "array"}
+      "schema": {
+        "type": "array"
+      }
     },
     {
       "name": "dataset_id",
       "description": "ID to assign the published collection, e.g. \"mosquito_hotspots\"",
-      "schema": {"type": "string"}
+      "schema": {
+        "type": "string"
+      }
     }
   ],
   "process_graph": {
-
     "load_temperature": {
       "process_id": "load_collection",
-      "arguments": {"id": "chelsa_temperature_monthly", "temporal_extent": {"from_parameter": "temporal_extent"}}
+      "arguments": {
+        "id": "chelsa_temperature_monthly",
+        "temporal_extent": {
+          "from_parameter": "temporal_extent"
+        }
+      }
     },
     "load_elevation": {
       "process_id": "load_collection",
-      "arguments": {"id": "nasadem_elevation"}
+      "arguments": {
+        "id": "nasadem_elevation"
+      }
     },
     "load_landcover": {
       "process_id": "load_collection",
-      "arguments": {"id": "esa_worldcover_2021"}
+      "arguments": {
+        "id": "esa_worldcover_2021"
+      }
     },
     "load_rice": {
       "process_id": "load_collection",
-      "arguments": {"id": "africa_rice_fields_2023"}
+      "arguments": {
+        "id": "africa_rice_fields_2023"
+      }
     },
     "load_population": {
       "process_id": "load_collection",
-      "arguments": {"id": "worldpop_population_yearly", "temporal_extent": {"from_parameter": "temporal_extent"}}
+      "arguments": {
+        "id": "worldpop_population_yearly",
+        "temporal_extent": {
+          "from_parameter": "temporal_extent"
+        }
+      }
     },
-
     "lc_2d": {
       "process_id": "reduce_dimension",
       "arguments": {
-        "data": {"from_node": "load_landcover"},
-        "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}},
+        "data": {
+          "from_node": "load_landcover"
+        },
+        "reducer": {
+          "process_graph": {
+            "first": {
+              "process_id": "first",
+              "arguments": {
+                "data": {
+                  "from_parameter": "data"
+                }
+              },
+              "result": true
+            }
+          }
+        },
         "dimension": "t"
       }
     },
     "rice_2d": {
       "process_id": "reduce_dimension",
       "arguments": {
-        "data": {"from_node": "load_rice"},
-        "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}},
+        "data": {
+          "from_node": "load_rice"
+        },
+        "reducer": {
+          "process_graph": {
+            "first": {
+              "process_id": "first",
+              "arguments": {
+                "data": {
+                  "from_parameter": "data"
+                }
+              },
+              "result": true
+            }
+          }
+        },
         "dimension": "t"
       }
     },
     "pop_2d": {
       "process_id": "reduce_dimension",
       "arguments": {
-        "data": {"from_node": "load_population"},
-        "reducer": {"process_graph": {"last": {"process_id": "last", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}},
+        "data": {
+          "from_node": "load_population"
+        },
+        "reducer": {
+          "process_graph": {
+            "last": {
+              "process_id": "last",
+              "arguments": {
+                "data": {
+                  "from_parameter": "data"
+                }
+              },
+              "result": true
+            }
+          }
+        },
         "dimension": "t"
       }
     },
-
     "lc_30m": {
-      "process_id": "resample_cube_spatial",
+      "process_id": "resample_to_target",
       "arguments": {
-        "data": {"from_node": "lc_2d"},
-        "target": {"from_node": "load_elevation"},
+        "data": {
+          "from_node": "lc_2d"
+        },
+        "target": {
+          "from_node": "load_elevation"
+        },
         "method": "near"
       }
     },
     "rice_30m": {
-      "process_id": "resample_cube_spatial",
+      "process_id": "resample_to_target",
       "arguments": {
-        "data": {"from_node": "rice_2d"},
-        "target": {"from_node": "load_elevation"},
+        "data": {
+          "from_node": "rice_2d"
+        },
+        "target": {
+          "from_node": "load_elevation"
+        },
         "method": "near"
       }
     },
-
     "correct_temperature": {
       "process_id": "lapse_rate_downscale",
       "arguments": {
-        "temperature": {"from_node": "load_temperature"},
-        "elevation": {"from_node": "load_elevation"}
+        "temperature": {
+          "from_node": "load_temperature"
+        },
+        "elevation": {
+          "from_node": "load_elevation"
+        }
       }
     },
     "mean_temperature": {
       "process_id": "reduce_dimension",
       "arguments": {
-        "data": {"from_node": "correct_temperature"},
-        "reducer": {"process_graph": {"mean": {"process_id": "mean", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}},
+        "data": {
+          "from_node": "correct_temperature"
+        },
+        "reducer": {
+          "process_graph": {
+            "mean": {
+              "process_id": "mean",
+              "arguments": {
+                "data": {
+                  "from_parameter": "data"
+                }
+              },
+              "result": true
+            }
+          }
+        },
         "dimension": "t"
       }
     },
-
     "compute_suitability": {
       "process_id": "suitability",
-      "arguments": {"temperature": {"from_node": "mean_temperature"}}
+      "arguments": {
+        "temperature": {
+          "from_node": "mean_temperature"
+        }
+      }
     },
-
     "compute_breeding_mask": {
       "process_id": "breeding_site_mask",
       "arguments": {
-        "landcover": {"from_node": "lc_30m"},
-        "rice": {"from_node": "rice_30m"}
+        "landcover": {
+          "from_node": "lc_30m"
+        },
+        "rice": {
+          "from_node": "rice_30m"
+        }
       }
     },
-
     "compute_exposure": {
       "process_id": "exposure",
       "arguments": {
-        "breeding_mask": {"from_node": "compute_breeding_mask"},
-        "elevation": {"from_node": "load_elevation"},
-        "suitability": {"from_node": "compute_suitability"}
+        "breeding_mask": {
+          "from_node": "compute_breeding_mask"
+        },
+        "elevation": {
+          "from_node": "load_elevation"
+        },
+        "suitability": {
+          "from_node": "compute_suitability"
+        }
       }
     },
-
     "pop_aligned": {
-      "process_id": "resample_cube_spatial",
+      "process_id": "resample_to_target",
       "arguments": {
-        "data": {"from_node": "pop_2d"},
-        "target": {"from_node": "compute_exposure"},
+        "data": {
+          "from_node": "pop_2d"
+        },
+        "target": {
+          "from_node": "compute_exposure"
+        },
         "method": "near"
       }
     },
     "pop_exposure": {
       "process_id": "multiply_cubes",
       "arguments": {
-        "x": {"from_node": "pop_aligned"},
-        "y": {"from_node": "compute_exposure"}
+        "x": {
+          "from_node": "pop_aligned"
+        },
+        "y": {
+          "from_node": "compute_exposure"
+        }
       }
     },
-
     "compute_hotspots": {
       "process_id": "hotspots",
       "arguments": {
-        "pop_exposure": {"from_node": "pop_exposure"},
+        "pop_exposure": {
+          "from_node": "pop_exposure"
+        },
         "percentile": 90.0
       }
     },
-
     "save": {
       "process_id": "save_result",
       "arguments": {
-        "data": {"from_node": "compute_hotspots"},
+        "data": {
+          "from_node": "compute_hotspots"
+        },
         "format": "Zarr",
         "options": {
-          "dataset_id": {"from_parameter": "dataset_id"},
-          "variable": "hotspot"
+          "dataset_id": {
+            "from_parameter": "dataset_id"
+          },
+          "variable": "hotspot",
+          "publish": true
         }
       },
       "result": true
     }
-
   }
 }
