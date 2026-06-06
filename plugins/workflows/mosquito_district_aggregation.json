@@ -21,7 +21,7 @@
     {
       "name": "district_ids",
       "description": "List of identifiers matching the features in geometries, used as labels in the CSV geometry column.",
-      "schema": {"type": "array"}
+      "schema": {"type": "array", "items": {"type": "string"}}
     }
   ],
   "process_graph": {
