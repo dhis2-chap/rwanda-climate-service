@@ -12,10 +12,11 @@ The pipeline is identical in concept to yours. This document explains the mappin
 |---|---|---|
 | `climate.lapse_rate_downscale` | `lapse_rate_downscale` | `plugins/processes/lapse_rate_downscale.py` |
 | `suitability.thermal_suitability` | `suitability` | `plugins/processes/suitability.py` |
-| `landcover.breeding_site_mask` | internal to `exposure` | `plugins/processes/exposure.py` |
+| `landcover.breeding_site_mask` | `breeding_site_mask` | `plugins/processes/breeding_site_mask.py` |
 | `exposure.exposure` | `exposure` | `plugins/processes/exposure.py` |
+| `pop_exposure = population × exposure` | `multiply_cubes` × 2 + `resample_cube_spatial` | process graph (built-in + thin wrapper) |
 | `hotspots.identify_hotspots` | `hotspots` | `plugins/processes/hotspots.py` |
-| `aggregate.aggregate_to_admin` | openEO `aggregate_spatial` | framework built-in |
+| `aggregate.aggregate_to_admin` | `aggregate_spatial` | framework built-in |
 
 ---
 
@@ -178,6 +179,33 @@ for f in d['features']:
 
 ## Process implementations
 
+### `breeding_site_mask`
+
+Equivalent to `landcover.breeding_site_mask`. Returns a float32 DataArray encoding three states:
+- **1** = breeding site (WorldCover wetlands 90/95, 2-pixel water-edge buffer, rice fields)
+- **0** = non-breeding land
+- **NaN** = permanent water (class 80) — propagates through `exposure` as a water mask
+
+Source: [`plugins/processes/breeding_site_mask.py`](plugins/processes/breeding_site_mask.py)
+
+### `exposure`
+
+Takes the pre-computed breeding mask instead of raw landcover + rice. The NaN-encoding of water pixels in the breeding mask is the water mask: no extra parameter needed.
+
+```
+exposure(x) = exp(−d(x) / λ) × exp(−max(Δz(x), 0) / γ)
+```
+
+No suitability input — the `suitability × exposure` multiplication is done explicitly in the process graph with `multiply_cubes`. Source: [`plugins/processes/exposure.py`](plugins/processes/exposure.py)
+
+### `multiply_cubes`
+
+Thin wrapper for element-wise multiplication of two spatially aligned DataArrays. Used twice in the process graph: `suitability × exposure` → `weighted_exposure`, and `population × weighted_exposure` → `pop_exposure`. Source: [`plugins/processes/multiply_cubes.py`](plugins/processes/multiply_cubes.py)
+
+### `hotspots`
+
+Takes pre-computed `pop_exposure` directly; just thresholds at the Nth percentile of non-zero values. The population × exposure multiplication and the population spatial alignment (`resample_cube_spatial`) are done in the process graph before this node. Source: [`plugins/processes/hotspots.py`](plugins/processes/hotspots.py)
+
 ### `lapse_rate_downscale`
 
 ```
@@ -193,23 +221,6 @@ S(T) = exp(−((T − T_opt) / σ)²)   for T_min ≤ T ≤ T_max, else 0
 ```
 
 Equivalent to `suitability.thermal_suitability`. Source: [`plugins/processes/suitability.py`](plugins/processes/suitability.py)
-
-### `exposure`
-
-```
-exposure(x) = exp(−d(x) / λ) × exp(−max(Δz(x), 0) / γ) × S(T)
-```
-
-- `d(x)` — Euclidean distance to nearest breeding site  
-- `Δz(x)` — elevation of pixel x minus elevation of its nearest breeding site (from `distance_transform_edt(return_indices=True)`, same approach as chap-GIS)  
-- Breeding sites: WorldCover 90, 95; 2-pixel dilation around 80; rice fields  
-- Permanent-water pixels (class 80) set to NaN in output  
-
-Source: [`plugins/processes/exposure.py`](plugins/processes/exposure.py)
-
-### `hotspots`
-
-Threshold at the 90th percentile of non-zero `population × exposure` values; returns binary mask. Equivalent to `hotspots.identify_hotspots`. Source: [`plugins/processes/hotspots.py`](plugins/processes/hotspots.py)
 
 ---
 

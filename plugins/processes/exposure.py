@@ -1,4 +1,4 @@
-"""Human exposure to mosquito breeding sites via distance-decay kernel."""
+"""Mosquito exposure via distance-decay kernel from breeding sites."""
 
 from __future__ import annotations
 
@@ -7,41 +7,11 @@ import xarray as xr
 
 from open_climate_service.process import process
 
-# Distance-decay parameters from chap-GIS (calibrated for Anopheles)
 _LAMBDA_M = 651.0   # horizontal decay length (metres)
 _GAMMA_M = 22.5     # vertical decay length (metres above breeding site)
 
-# WorldCover permanent-water class used to mask non-land pixels
-_WATER_CLASS = 80
-
-
-def _breeding_mask(landcover: xr.DataArray, rice: xr.DataArray | None = None) -> np.ndarray:
-    """Identify breeding sites from WorldCover landcover and optional rice fields.
-
-    Breeding sites:
-    - Wetlands (WorldCover codes 90, 95)
-    - 2-pixel buffer around permanent water (code 80)
-    - Rice fields (if provided)
-    """
-    lc = landcover.values
-    mask = np.isin(lc, [90, 95]).astype("float32")
-    from scipy.ndimage import binary_dilation
-
-    water = lc == _WATER_CLASS
-    buffered = binary_dilation(water, iterations=2)
-    mask = np.where(buffered, 1.0, mask)
-    if rice is not None:
-        mask = np.where(rice.values > 0, 1.0, mask)
-    return mask
-
 
 def _to_spatial_only(da: xr.DataArray) -> xr.DataArray:
-    """Return a 2-D (y, x) slice, dropping any size-1 non-spatial dims.
-
-    Static datasets (WorldCover, rice fields, elevation) carry a nominal
-    t-coordinate that typically does not match the suitability time axis.
-    Squeeze them to 2-D so that interp_like only needs to align the spatial axes.
-    """
     for dim in list(da.dims):
         if dim not in ("y", "x") and da.sizes[dim] == 1:
             da = da.isel({dim: 0}, drop=True)
@@ -49,74 +19,59 @@ def _to_spatial_only(da: xr.DataArray) -> xr.DataArray:
 
 
 @process(
-    summary="Human exposure to mosquito breeding sites",
+    summary="Distance-decay exposure field from breeding sites",
     description=(
-        "Computes a [0, 1] exposure score using a two-component distance-decay "
-        "kernel from identified breeding sites (wetlands, permanent water buffers, "
-        "rice fields):\n\n"
-        "  exposure = exp(-d_horiz / λ) × exp(-max(Δz, 0) / γ) × suitability\n\n"
-        "where d_horiz is the Euclidean distance to the nearest breeding site "
-        "(λ = 651 m), and Δz = elev_pixel − elev_nearest_breeding is the "
-        "elevation gain above that site (γ = 22.5 m).  The vertical term is "
-        "omitted when no elevation input is provided.\n\n"
-        "Pixels classified as permanent water (WorldCover class 80) are masked "
-        "to NaN in the output."
+        "Computes a [0, 1] exposure field using a two-component distance-decay "
+        "kernel from breeding sites identified by the breeding_site_mask process:\n\n"
+        "  exposure(x) = exp(−d(x) / λ) × exp(−max(Δz(x), 0) / γ)\n\n"
+        "where d(x) is the Euclidean distance to the nearest breeding site "
+        "(λ = 651 m) and Δz(x) = elev(x) − elev(nearest breeding site) is "
+        "the elevation gain above that site (γ = 22.5 m, omitted when no "
+        "elevation is provided).\n\n"
+        "Permanent-water pixels (NaN in breeding_mask) are set to NaN in the output.\n\n"
+        "Multiply the result by a suitability raster in the process graph to "
+        "produce habitat-weighted exposure."
     ),
 )
 def exposure(
-    suitability: xr.DataArray,
-    landcover: xr.DataArray,
-    rice: xr.DataArray | None = None,
+    breeding_mask: xr.DataArray,
     elevation: xr.DataArray | None = None,
     pixel_size_m: float = 1000.0,
 ) -> xr.DataArray:
-    """Exposure = distance-decay kernel convolved with breeding site mask × suitability.
+    """Distance-decay exposure kernel from mosquito breeding sites.
 
     Parameters
     ----------
-    suitability:
-        Suitability score from :func:`suitability` process, [0, 1].
-    landcover:
-        ESA WorldCover classification raster (integer codes).
-    rice:
-        Optional binary rice field raster (1 = rice, 0 = no rice).
+    breeding_mask:
+        Binary breeding-site mask from :func:`breeding_site_mask`:
+        1 = breeding site, 0 = non-breeding land, NaN = permanent water.
     elevation:
         Optional terrain elevation in metres.  When supplied, the vertical
-        distance-decay term exp(-max(Δz, 0) / γ) is applied, where Δz is
-        the elevation of the current pixel minus the elevation of its nearest
-        breeding site.
+        decay term exp(−max(Δz, 0) / γ) is applied using the elevation of
+        the nearest breeding site as the reference.
     pixel_size_m:
         Pixel size in metres for horizontal distance computation.
 
     Returns
     -------
     xr.DataArray
-        Dimensionless exposure score in [0, 1], same grid as suitability.
-        Permanent-water pixels are set to NaN.
+        Dimensionless exposure field in [0, 1], same grid as breeding_mask.
+        Permanent-water pixels are NaN.
     """
     from scipy.ndimage import distance_transform_edt
 
-    # Static layers carry a nominal time coordinate — collapse to (y, x) first.
-    landcover = _to_spatial_only(landcover)
-    if rice is not None:
-        rice = _to_spatial_only(rice)
     if elevation is not None:
         elevation = _to_spatial_only(elevation)
+        if elevation.shape != breeding_mask.shape:
+            elevation = elevation.interp_like(breeding_mask, method="linear").astype("float32")
 
-    # Spatially align static layers to the suitability grid using a time-free slice.
-    ref = suitability.isel(t=0, drop=True) if "t" in suitability.dims else suitability
-    if landcover.shape != ref.shape:
-        landcover = landcover.interp_like(ref, method="nearest")
-    if rice is not None and rice.shape != ref.shape:
-        rice = rice.interp_like(ref, method="nearest")
-    if elevation is not None and elevation.shape != ref.shape:
-        elevation = elevation.interp_like(ref, method="linear").astype("float32")
+    mask_vals = breeding_mask.values.astype("float32")
+    water_mask = np.isnan(mask_vals)
+    # Treat water as non-breeding for the distance transform (mosquitoes don't
+    # breed in open water, but adjacent pixels do get exposure from nearby sites).
+    is_breeding = np.where(water_mask, False, mask_vals > 0)
+    no_breeding = ~is_breeding
 
-    breeding = _breeding_mask(landcover, rice)
-    water_mask = landcover.values == _WATER_CLASS
-
-    no_breeding = breeding == 0
-    # distance_transform_edt with return_indices gives nearest-breeding-site coords
     if elevation is not None:
         dist_px, nearest_idx = distance_transform_edt(no_breeding, return_indices=True)
         elev_vals = elevation.values.astype("float32")
@@ -125,26 +80,27 @@ def exposure(
         vertical_decay = np.exp(-delta_z / _GAMMA_M).astype("float32")
     else:
         dist_px = distance_transform_edt(no_breeding)
-        vertical_decay = np.ones_like(breeding, dtype="float32")
+        vertical_decay = np.ones(mask_vals.shape, dtype="float32")
 
     dist_m = dist_px * pixel_size_m
     horizontal_decay = np.exp(-dist_m / _LAMBDA_M).astype("float32")
-    exp_score = (horizontal_decay * vertical_decay * suitability.values).astype("float32")
+    exp_score = (horizontal_decay * vertical_decay).astype("float32")
 
-    # Mask permanent-water pixels
+    # Apply water mask
     exp_score = np.where(water_mask, np.nan, exp_score)
 
     # Normalise non-NaN values to [0, 1]
-    max_val = np.nanmax(exp_score)
+    max_val = float(np.nanmax(exp_score))
     if max_val > 0:
         exp_score = exp_score / max_val
 
-    result = suitability.copy(data=exp_score)
+    result = breeding_mask.copy(data=exp_score)
     result.attrs = {
-        "long_name": "human exposure to breeding sites",
+        "long_name": "distance-decay exposure from breeding sites",
         "units": "1",
         "valid_range": [0.0, 1.0],
         "horizontal_lambda_m": _LAMBDA_M,
         "vertical_gamma_m": _GAMMA_M,
     }
+    result.name = "exposure"
     return result
