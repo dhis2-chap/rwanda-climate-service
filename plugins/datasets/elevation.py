@@ -21,12 +21,15 @@ from open_climate_service.streaming.protocol import GridSpec
 
 _BUCKET = "copernicus-dem-30m"
 _REGION = "us-east-1"
-_RESOLUTION_DEG = 1 / 3600   # 1 arc-second in degrees
+# Store elevation at CHELSA resolution (~30 arc-seconds ≈ 1 km at the equator) so that
+# lapse_rate_downscale operates on the same grid as temperature rather than upsampling
+# the entire pipeline to the native 1 arc-second (~30 m) DEM resolution.
+_RESOLUTION_DEG = 1 / 120   # 30 arc-seconds ≈ 1 km
 _CACHE = Path.home() / ".cache" / "chap-gis" / "copernicus-dem-30m"
 
 
 def _tile_key(lat_floor: int, lon_floor: int) -> str:
-    """Return S3 key (path) to the COG .tif for the tile whose SW corner is (lat, lon)."""
+    """Return the S3 key for the 1°×1° COG tile whose SW corner is (lat, lon)."""
     lat_str = f"N{abs(lat_floor):02d}" if lat_floor >= 0 else f"S{abs(lat_floor):02d}"
     lon_str = f"E{abs(lon_floor):03d}" if lon_floor >= 0 else f"W{abs(lon_floor):03d}"
     name = f"Copernicus_DSM_COG_10_{lat_str}_00_{lon_str}_00_DEM"
@@ -57,7 +60,7 @@ def _ensure_tile(lat_floor: int, lon_floor: int) -> Path | None:
     import s3fs
 
     fs = s3fs.S3FileSystem(anon=True, client_kwargs={"region_name": _REGION})
-    key = f"{_BUCKET}/{name}/{name}.tif"
+    key = _tile_key(lat_floor, lon_floor)
     try:
         fs.get(key, str(target))
     except FileNotFoundError:

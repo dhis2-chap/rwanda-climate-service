@@ -39,9 +39,12 @@ def hotspots(
     """
     vals = pop_exposure.values.astype("float32")
     nonzero = vals[np.isfinite(vals) & (vals > 0)]
-    threshold = float(np.percentile(nonzero, percentile)) if len(nonzero) > 0 else 0.0
-
-    mask = np.where(np.isfinite(vals) & (vals >= threshold), 1, 0).astype("uint8")
+    if len(nonzero) == 0:
+        mask = np.zeros_like(vals, dtype="uint8")
+        threshold = 0.0
+    else:
+        threshold = float(np.percentile(nonzero, percentile))
+        mask = np.where(np.isfinite(vals) & (vals >= threshold), 1, 0).astype("uint8")
 
     result = pop_exposure.copy(data=mask)
     result.attrs = {

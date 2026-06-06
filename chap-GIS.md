@@ -56,11 +56,13 @@ All defaults match chap-GIS exactly.
 ## Key differences
 
 ### Resolution
-chap-GIS targets 30 m by reprojecting everything to a fine DEM grid. This implementation works at CHELSA's native ~1 km because the openEO `load_collection` returns data at the dataset's native resolution. At 1 km, Rwanda is ~228×252 pixels — manageable for a national service.
+chap-GIS targets 30 m by reprojecting everything to a fine DEM grid. This implementation works at CHELSA's native ~1 km (30 arc-seconds). At 1 km, Rwanda is ~228×252 pixels — manageable for a national service.
 
-The lapse-rate correction is still applied (temperature adjusted for actual vs. coarse elevation), just at 1 km rather than 30 m. The vertical decay in `exposure` likewise uses 1 km elevation. The physics is the same; sub-kilometre terrain variation is averaged out.
+The Copernicus DEM GLO-30 is ingested at 30 arc-seconds (~1 km) — the same grid as CHELSA — rather than at its native 1 arc-second (~30 m). This keeps the entire pipeline at 1 km. The lapse-rate correction is structurally present but has near-zero effect at the same resolution (actual vs. reference elevation within a 1 km cell are the same value); sub-kilometre terrain variation is averaged out.
 
-To run at 30 m, load elevation first and pass `spatial_extent` with your target resolution — the processing chain is resolution-agnostic.
+The vertical decay in `exposure` likewise operates at 1 km. The physics is the same; only the spatial detail differs.
+
+To run at 30 m, reingest elevation with `_RESOLUTION_DEG = 1/3600` and accept the ~900× larger array size.
 
 ### Aggregation method
 chap-GIS uses `exactextract` for exact pixel-in-polygon weighting. This implementation uses openEO's `aggregate_spatial`, which uses centroid-based assignment. For the ~1 km pixel size relative to Rwanda district areas (median ~400 km²), the difference is negligible.
@@ -113,19 +115,24 @@ JOB=$(curl -s -X POST http://localhost:8000/jobs \
   -d '{
     "title": "Mosquito hotspot raster (Rwanda 2018 Q1)",
     "process": {"process_graph": {
-      "load_temperature":    {"process_id": "load_collection",     "arguments": {"id": "chelsa_temperature_monthly",  "temporal_extent": ["2018-01-01","2018-04-01"]}},
-      "load_elevation":      {"process_id": "load_collection",     "arguments": {"id": "nasadem_elevation"}},
-      "load_landcover":      {"process_id": "load_collection",     "arguments": {"id": "esa_worldcover_2021"}},
-      "load_rice":           {"process_id": "load_collection",     "arguments": {"id": "africa_rice_fields_2023"}},
-      "load_population":     {"process_id": "load_collection",     "arguments": {"id": "worldpop_population_yearly", "temporal_extent": ["2018-01-01","2018-12-31"]}},
+      "load_temperature":       {"process_id": "load_collection",      "arguments": {"id": "chelsa_temperature_monthly",  "temporal_extent": ["2018-01-01","2018-04-01"]}},
+      "load_elevation":         {"process_id": "load_collection",      "arguments": {"id": "nasadem_elevation"}},
+      "load_landcover":         {"process_id": "load_collection",      "arguments": {"id": "esa_worldcover_2021"}},
+      "load_rice":              {"process_id": "load_collection",      "arguments": {"id": "africa_rice_fields_2023"}},
+      "load_population":        {"process_id": "load_collection",      "arguments": {"id": "worldpop_population_yearly", "temporal_extent": ["2018-01-01","2018-12-31"]}},
       "lc_2d":   {"process_id": "reduce_dimension", "arguments": {"data": {"from_node": "load_landcover"}, "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
       "rice_2d": {"process_id": "reduce_dimension", "arguments": {"data": {"from_node": "load_rice"},      "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
-      "correct_temperature": {"process_id": "lapse_rate_downscale", "arguments": {"temperature": {"from_node": "load_temperature"}, "elevation": {"from_node": "load_elevation"}}},
-      "mean_temperature":    {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "correct_temperature"}, "reducer": {"process_graph": {"mean": {"process_id": "mean", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
-      "compute_suitability": {"process_id": "suitability", "arguments": {"temperature": {"from_node": "mean_temperature"}}},
-      "compute_exposure":    {"process_id": "exposure",    "arguments": {"suitability": {"from_node": "compute_suitability"}, "landcover": {"from_node": "lc_2d"}, "rice": {"from_node": "rice_2d"}, "elevation": {"from_node": "load_elevation"}}},
-      "compute_hotspots":    {"process_id": "hotspots",   "arguments": {"population": {"from_node": "load_population"}, "exposure": {"from_node": "compute_exposure"}, "percentile": 90.0}},
-      "save": {"process_id": "save_result", "arguments": {"data": {"from_node": "compute_hotspots"}, "format": "Zarr", "options": {"dataset_id": "mosquito_hotspots", "variable": "hotspot"}}, "result": true}
+      "pop_2d":  {"process_id": "reduce_dimension", "arguments": {"data": {"from_node": "load_population"},"reducer": {"process_graph": {"last":  {"process_id": "last",  "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
+      "correct_temperature":    {"process_id": "lapse_rate_downscale", "arguments": {"temperature": {"from_node": "load_temperature"}, "elevation": {"from_node": "load_elevation"}}},
+      "mean_temperature":       {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "correct_temperature"}, "reducer": {"process_graph": {"mean": {"process_id": "mean", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
+      "compute_suitability":    {"process_id": "suitability",          "arguments": {"temperature": {"from_node": "mean_temperature"}}},
+      "compute_breeding_mask":  {"process_id": "breeding_site_mask",   "arguments": {"landcover": {"from_node": "lc_2d"}, "rice": {"from_node": "rice_2d"}}},
+      "compute_exposure":       {"process_id": "exposure",             "arguments": {"breeding_mask": {"from_node": "compute_breeding_mask"}, "elevation": {"from_node": "load_elevation"}}},
+      "weighted_exposure":      {"process_id": "multiply_cubes",       "arguments": {"x": {"from_node": "compute_suitability"}, "y": {"from_node": "compute_exposure"}}},
+      "pop_aligned":            {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "pop_2d"}, "target": {"from_node": "weighted_exposure"}, "method": "near"}},
+      "pop_exposure":           {"process_id": "multiply_cubes",       "arguments": {"x": {"from_node": "pop_aligned"}, "y": {"from_node": "weighted_exposure"}}},
+      "compute_hotspots":       {"process_id": "hotspots",             "arguments": {"pop_exposure": {"from_node": "pop_exposure"}, "percentile": 90.0}},
+      "save":                   {"process_id": "save_result",          "arguments": {"data": {"from_node": "compute_hotspots"}, "format": "Zarr", "options": {"dataset_id": "mosquito_hotspots", "variable": "hotspot"}}, "result": true}
     }}
   }')
 JOB_ID=$(echo $JOB | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
