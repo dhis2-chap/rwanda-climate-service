@@ -1,9 +1,12 @@
-"""Africa rice fields static dataset plugin (Jiang et al. 2023, Zenodo 13729353)."""
+"""Rwanda rice fields static dataset plugin (Jiang et al. 2023, Zenodo 13729353).
+
+Uses the Rwanda national tile from the Jiang et al. 2023 Africa-wide rice paddy
+dataset. To target another country, point ``_ZENODO_URL`` at that country's tile.
+"""
 
 from __future__ import annotations
 
 import asyncio
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -18,14 +21,14 @@ _RESOLUTION_DEG = 20 / (111_320)  # 20m in degrees (approx)
 
 
 class RiceFieldsPlugin:
-    """Static plugin for Africa rice field raster (Jiang et al. 2023).
+    """Static plugin for the Rwanda rice field raster (Jiang et al. 2023).
 
     Single-period dataset (2023). Downloads from Zenodo on first fetch
     and caches locally.
 
     Source: Zenodo record 13729353 (CC-BY-4.0)
     Resolution: 20 m
-    Coverage: Africa
+    Coverage: Rwanda (national tile of the Africa-wide dataset)
     """
 
     max_concurrency = 1

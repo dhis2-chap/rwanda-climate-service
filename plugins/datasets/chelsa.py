@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
-from pathlib import Path
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -81,11 +80,21 @@ class CHELSATemperaturePlugin:
         da = da.sel(x=slice(xmin, xmax), y=slice(ymax, ymin))
         da = da.load()
 
-        # CHELSA tas is stored as °C × 10 + 273.15 (scaled integer)
-        # or as raw Kelvin depending on version — check scale factor
+        # CHELSA V2.1 tas is stored as Kelvin × 10 (scale_factor 0.1 → K). rioxarray
+        # returns the raw integer values (mask_and_scale is off by default), so we
+        # apply scale/offset ourselves and convert K → °C.
         scale = da.attrs.get("scale_factor", 0.1)
         offset = da.attrs.get("add_offset", 0.0)
         temp_c = (da.values.astype("float32") * scale + offset) - 273.15
+
+        # Guard against a scale/encoding change silently producing nonsense (e.g. if
+        # rioxarray ever starts auto-applying scale_factor and we double-scale).
+        finite = temp_c[np.isfinite(temp_c)]
+        if finite.size and (finite.min() < -90.0 or finite.max() > 60.0):
+            raise ValueError(
+                f"CHELSA temperature for {period_id} is outside the physical range "
+                f"[{finite.min():.1f}, {finite.max():.1f}] °C — check scale_factor handling."
+            )
 
         ts = np.datetime64(f"{period_id}-01", "D").astype("datetime64[ns]")
         da_c = xr.DataArray(

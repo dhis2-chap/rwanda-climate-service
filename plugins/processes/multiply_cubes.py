@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import xarray as xr
 
 from open_climate_service.process import process
@@ -40,6 +39,12 @@ def multiply_cubes(x: xr.DataArray, y: xr.DataArray) -> xr.DataArray:
 
     x = _squeeze_t(x)
     y = _squeeze_t(y)
+
+    if x.shape != y.shape:
+        raise ValueError(
+            f"multiply_cubes: inputs must share the same spatial grid, got {x.shape} and {y.shape}. "
+            "Align them first with resample_to_target."
+        )
 
     result = (x.values * y.values).astype("float32")
     out = y.copy(data=result)

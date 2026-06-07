@@ -112,7 +112,6 @@ class ElevationPlugin:
             if path is None:
                 continue
             da = xr.open_dataarray(path, engine="rasterio").squeeze(drop=True)
-            da = da.rename({"x": "x", "y": "y"})
             arrays.append(da.load())
 
         if not arrays:

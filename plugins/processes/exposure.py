@@ -64,14 +64,23 @@ def exposure(
         Exposure field (no fixed upper bound; ≤ 1 when suitability ≤ 1),
         same grid as breeding_mask.  Permanent-water pixels are NaN.
     """
+    import math
+
     from scipy.ndimage import distance_transform_edt
 
-    if pixel_size_m is None:
-        if breeding_mask.x.size > 1:
-            dx_deg = float(abs(float(breeding_mask.x[1]) - float(breeding_mask.x[0])))
-            pixel_size_m = dx_deg * 111_320.0
-        else:
-            pixel_size_m = 30.0
+    # Per-axis metric pixel size. In EPSG:4326 a degree of latitude is ~constant
+    # (110_540 m) while a degree of longitude shrinks by cos(lat), so distances
+    # must be sampled anisotropically rather than with one isotropic pixel size.
+    if pixel_size_m is not None:
+        dy_m = dx_m = pixel_size_m
+    elif breeding_mask.x.size > 1 and breeding_mask.y.size > 1:
+        lat0 = float(breeding_mask.y.mean())
+        dx_deg = float(abs(float(breeding_mask.x[1]) - float(breeding_mask.x[0])))
+        dy_deg = float(abs(float(breeding_mask.y[1]) - float(breeding_mask.y[0])))
+        dx_m = dx_deg * 111_320.0 * math.cos(math.radians(lat0))
+        dy_m = dy_deg * 110_540.0
+    else:
+        dy_m = dx_m = 30.0
 
     if elevation is not None:
         elevation = _to_spatial_only(elevation)
@@ -90,12 +99,12 @@ def exposure(
 
     # Always compute indices when elevation or suitability needs nearest-site lookup
     need_indices = elevation is not None or suitability is not None
+    # sampling=(dy_m, dx_m) makes the transform return distances in metres directly.
     if need_indices:
-        dist_px, nearest_idx = distance_transform_edt(no_breeding, return_indices=True)
+        dist_m, nearest_idx = distance_transform_edt(no_breeding, return_indices=True, sampling=(dy_m, dx_m))
     else:
-        dist_px = distance_transform_edt(no_breeding)
+        dist_m = distance_transform_edt(no_breeding, sampling=(dy_m, dx_m))
 
-    dist_m = dist_px * pixel_size_m
     horizontal_decay = np.exp(-dist_m / _LAMBDA_M).astype("float32")
 
     if elevation is not None:
