@@ -94,38 +94,61 @@ class WorldCoverPlugin:
             return ["2021"]
         return []
 
-    async def fetch_period(self, period_id: str, bbox: list[float], **_: Any) -> xr.Dataset:
+    async def fetch_period(
+        self, period_id: str, bbox: list[float], **_: Any
+    ) -> xr.Dataset:
         return await asyncio.to_thread(self._fetch_sync, bbox)
 
     def _fetch_sync(self, bbox: list[float]) -> xr.Dataset:
-        import rioxarray  # noqa: F401
+        import rioxarray
 
         xmin, ymin, xmax, ymax = map(float, bbox)
         tiles = _tiles_for_bbox(xmin, ymin, xmax, ymax)
 
-        arrays = []
+        # A WorldCover tile is 36000x36000 at 10 m. Opening masked (the xarray
+        # rasterio default) promotes uint8 -> float32, and materialising a full tile
+        # is ~4.8 GiB — a multi-tile bbox holds several at once, which is what blew up
+        # memory. Two things keep it small and lazy:
+        #   * masked=False  -> keep the native uint8 (no 4x float32 blow-up)
+        #   * chunks=True    -> dask-backed; the coordinate slice is a windowed read,
+        #                       so only the bbox overlap of each tile is ever touched
+        # We never call .load() here: the dataset stays lazy and the streaming writer
+        # flushes it to the Zarr store chunk-by-chunk, so peak memory is a single
+        # chunk rather than the whole clipped window.
+        windows = []
         for tile in tiles:
             path = _ensure_tile(tile)
-            da = xr.open_dataarray(path, engine="rasterio").squeeze(drop=True)
-            arrays.append(da)
+            da = rioxarray.open_rasterio(path, masked=False, chunks=True).squeeze(
+                "band", drop=True
+            )
+            window = da.sel(x=slice(xmin, xmax), y=slice(ymax, ymin))
+            if window.size == 0:
+                continue
+            windows.append(window)
 
-        if len(arrays) == 1:
-            merged = arrays[0]
+        if not windows:
+            raise RuntimeError(f"No ESA WorldCover data within bbox {bbox}")
+        if len(windows) == 1:
+            clipped = windows[0]
         else:
-            combined = xr.combine_by_coords(arrays, combine_attrs="drop_conflicts")
-            if isinstance(combined, xr.Dataset):
-                merged = combined[list(combined.data_vars)[0]]
-            else:
-                merged = combined
-        clipped = merged.sel(x=slice(xmin, xmax), y=slice(ymax, ymin)).load()
+            combined = xr.combine_by_coords(windows, combine_attrs="drop_conflicts")
+            clipped = (
+                combined[list(combined.data_vars)[0]]
+                if isinstance(combined, xr.Dataset)
+                else combined
+            )
 
         ts = np.datetime64("2021-01-01", "D").astype("datetime64[ns]")
-        da_out = xr.DataArray(
-            clipped.values.astype("uint8")[np.newaxis],
-            dims=["t", "y", "x"],
-            coords={"t": [ts], "y": clipped.y.values, "x": clipped.x.values},
+        # Add the time axis lazily and keep the dask array; drop rioxarray's
+        # spatial_ref coord and encoding so the streaming to_zarr write starts clean.
+        landcover = (
+            clipped.astype("uint8")
+            .expand_dims(t=[ts])
+            .drop_vars("spatial_ref", errors="ignore")
         )
-        da_out.attrs.update({
+        landcover.name = "landcover"
+        landcover.encoding = {}
+        landcover.attrs = {
             "long_name": "ESA WorldCover landcover classification",
             "flag_values": [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 100],
             "flag_meanings": (
@@ -133,5 +156,5 @@ class WorldCoverPlugin:
                 "bare_sparse_veg snow_ice permanent_water herbaceous_wetland "
                 "mangroves moss_lichen"
             ),
-        })
-        return xr.Dataset({"landcover": da_out})
+        }
+        return landcover.to_dataset()
