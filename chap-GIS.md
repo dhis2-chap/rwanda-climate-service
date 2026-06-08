@@ -14,7 +14,7 @@ The pipeline is identical in concept to yours. This document explains the mappin
 | `suitability.thermal_suitability` | `suitability` | `plugins/processes/suitability.py` |
 | `landcover.breeding_site_mask` | `breeding_site_mask` | `plugins/processes/breeding_site_mask.py` |
 | `exposure.exposure` | `exposure` | `plugins/processes/exposure.py` |
-| `pop_exposure = population × exposure` | `multiply_cubes` + `resample_cube_spatial` | process graph (built-in + thin wrapper) |
+| `pop_exposure = population × exposure` | `multiply_cubes` + `resample_to_target` | process graph (built-in + thin wrapper) |
 | `hotspots.identify_hotspots` | `hotspots` | `plugins/processes/hotspots.py` |
 | `aggregate.aggregate_to_admin` | `aggregate_spatial` | framework built-in |
 
@@ -56,7 +56,7 @@ All defaults match chap-GIS exactly.
 ## Key differences
 
 ### Resolution
-Both chap-GIS and this implementation target the Copernicus DEM GLO-30 (~30 m / 1 arc-second) as the reference grid. Temperature (CHELSA, ~1 km) is bilinearly interpolated up to the 30 m grid by `lapse_rate_downscale`. WorldCover (10 m) and rice fields (20 m) are produced at their native resolution by `breeding_site_mask`, then resampled to the 30 m DEM grid with `resample_cube_spatial` before the distance-decay `exposure` step. WorldPop (100 m) is resampled to the 30 m grid before the population × exposure multiplication.
+Both chap-GIS and this implementation target the Copernicus DEM GLO-30 (~30 m / 1 arc-second) as the reference grid. Temperature (CHELSA, ~1 km) is bilinearly interpolated up to the 30 m grid by `lapse_rate_downscale`. WorldCover (10 m) and rice fields (20 m) are produced at their native resolution by `breeding_site_mask`, then resampled to the 30 m DEM grid with `resample_to_target` before the distance-decay `exposure` step. WorldPop (100 m) is resampled to the 30 m grid before the population × exposure multiplication.
 
 At 30 m, Rwanda is ~7 500 × 6 800 pixels (~51 M pixels). The distance transform dominates compute time; expect a few minutes per run. This matches chap-GIS's processing profile.
 
@@ -67,7 +67,7 @@ chap-GIS uses `exactextract` for exact pixel-in-polygon weighting. This implemen
 Both chap-GIS and this implementation compute the temporal mean temperature first, then apply the TPC once. In the process graph: `reduce_dimension(correct_temperature, t, mean)` → `suitability(mean_temperature)`. The TPC is not applied per month.
 
 ### Output format
-chap-GIS writes a CHAP-compatible CSV directly. Here we use the framework's standard CSV format: columns `t`, `geometry` (district shapeID), `hotspot` (fraction). A thin adapter mapping `shapeID` → DHIS2 org-unit UID can translate this for DHIS2 import.
+chap-GIS writes a CHAP-compatible CSV directly. Here we use the framework's standard CSV format: columns `t`, `geometry` (district `shapeName`), `hotspot` (fraction). A thin adapter mapping `shapeName` → DHIS2 org-unit UID can translate this for DHIS2 import.
 
 ---
 
@@ -119,17 +119,17 @@ JOB=$(curl -s -X POST http://localhost:8000/jobs \
       "lc_2d":                  {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_landcover"}, "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
       "rice_2d":                {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_rice"},      "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
       "pop_2d":                 {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_population"},"reducer": {"process_graph": {"last":  {"process_id": "last",  "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
-      "lc_30m":                 {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "lc_2d"},   "target": {"from_node": "load_elevation"}, "method": "near"}},
-      "rice_30m":               {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "rice_2d"}, "target": {"from_node": "load_elevation"}, "method": "near"}},
+      "lc_30m":                 {"process_id": "resample_to_target",  "arguments": {"data": {"from_node": "lc_2d"},   "target": {"from_node": "load_elevation"}, "method": "near"}},
+      "rice_30m":               {"process_id": "resample_to_target",  "arguments": {"data": {"from_node": "rice_2d"}, "target": {"from_node": "load_elevation"}, "method": "near"}},
       "correct_temperature":    {"process_id": "lapse_rate_downscale", "arguments": {"temperature": {"from_node": "load_temperature"}, "elevation": {"from_node": "load_elevation"}}},
       "mean_temperature":       {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "correct_temperature"}, "reducer": {"process_graph": {"mean": {"process_id": "mean", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
       "compute_suitability":    {"process_id": "suitability",          "arguments": {"temperature": {"from_node": "mean_temperature"}}},
       "compute_breeding_mask":  {"process_id": "breeding_site_mask",   "arguments": {"landcover": {"from_node": "lc_30m"}, "rice": {"from_node": "rice_30m"}}},
       "compute_exposure":       {"process_id": "exposure",             "arguments": {"breeding_mask": {"from_node": "compute_breeding_mask"}, "elevation": {"from_node": "load_elevation"}, "suitability": {"from_node": "compute_suitability"}}},
-      "pop_aligned":            {"process_id": "resample_cube_spatial","arguments": {"data": {"from_node": "pop_2d"}, "target": {"from_node": "compute_exposure"}, "method": "near"}},
+      "pop_aligned":            {"process_id": "resample_to_target",  "arguments": {"data": {"from_node": "pop_2d"}, "target": {"from_node": "compute_exposure"}, "method": "near"}},
       "pop_exposure":           {"process_id": "multiply_cubes",       "arguments": {"x": {"from_node": "pop_aligned"}, "y": {"from_node": "compute_exposure"}}},
       "compute_hotspots":       {"process_id": "hotspots",             "arguments": {"pop_exposure": {"from_node": "pop_exposure"}, "percentile": 90.0}},
-      "save":                   {"process_id": "save_result",          "arguments": {"data": {"from_node": "compute_hotspots"}, "format": "Zarr", "options": {"dataset_id": "mosquito_hotspots", "variable": "hotspot"}}, "result": true}
+      "save":                   {"process_id": "save_result",          "arguments": {"data": {"from_node": "compute_hotspots"}, "format": "Zarr", "options": {"dataset_id": "mosquito_hotspots", "variable": "hotspot", "publish": true}}, "result": true}
     }}
   }')
 JOB_ID=$(echo $JOB | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
@@ -148,7 +148,7 @@ GEOJSON=$(cat plugins/data/rwanda_districts.geojson)
 DISTRICT_IDS=$(python3 -c "
 import json
 d = json.load(open('plugins/data/rwanda_districts.geojson'))
-print(json.dumps([f['properties']['shapeID'] for f in d['features']]))
+print(json.dumps([f['properties']['shapeName'] for f in d['features']]))
 ")
 
 JOB=$(curl -s -X POST http://localhost:8000/jobs \
@@ -167,17 +167,7 @@ curl -s -X POST "http://localhost:8000/jobs/$JOB_ID/results"
 curl -O "http://localhost:8000/jobs/$JOB_ID/results/result.csv"
 ```
 
-CSV columns: `t` (ISO month), `geometry` (GeoBoundaries `shapeID`), `hotspot` (fraction [0–1]).
-
-Map shapeID → district name:
-```bash
-python3 -c "
-import json
-d = json.load(open('plugins/data/rwanda_districts.geojson'))
-for f in d['features']:
-    print(f['properties']['shapeID'], f['properties']['shapeName'])
-"
-```
+CSV columns: `t` (ISO month), `geometry` (GeoBoundaries `shapeName`), `hotspot` (fraction [0–1]).
 
 ---
 
@@ -208,7 +198,7 @@ Thin wrapper for element-wise multiplication of two spatially aligned DataArrays
 
 ### `hotspots`
 
-Takes pre-computed `pop_exposure` directly; just thresholds at the Nth percentile of non-zero values. The population × exposure multiplication and the population spatial alignment (`resample_cube_spatial`) are done in the process graph before this node. Source: [`plugins/processes/hotspots.py`](plugins/processes/hotspots.py)
+Takes pre-computed `pop_exposure` directly; just thresholds at the Nth percentile of non-zero values. The population × exposure multiplication and the population spatial alignment (`resample_to_target`) are done in the process graph before this node. Source: [`plugins/processes/hotspots.py`](plugins/processes/hotspots.py)
 
 ### `lapse_rate_downscale`
 
@@ -239,7 +229,7 @@ Equivalent to `suitability.thermal_suitability`. Source: [`plugins/processes/sui
 
 ## End-to-end test results — Rwanda, Jan–Mar 2018
 
-Run 2026-06-06 on the Rwanda instance (`bbox: [28.8, -2.9, 30.9, -1.0]`).
+Run 2026-06-07 on the Rwanda instance (`bbox: [28.8, -2.9, 30.9, -1.0]`).
 
 ### Workflow 1: Mosquito Hotspot Raster
 
@@ -247,7 +237,7 @@ Run 2026-06-06 on the Rwanda instance (`bbox: [28.8, -2.9, 30.9, -1.0]`).
 |---|---|
 | Grid | 6 841 × 7 561 pixels at ~31 m |
 | Hotspot pixels (top 10 %) | 1 508 134 of 51 724 801 (2.9 %) |
-| Output | `mosquito_hotspots.zarr` — plain Zarr, 4-level pyramid |
+| Output | `mosquito_hotspots` Icechunk store — accessible via `/zarr/` (Zarr proxy) and `/icechunk/` (native SDK) |
 | Temporal input | CHELSA monthly mean temperature Jan–Mar 2018 |
 | Elevation | Copernicus DEM GLO-30 (native 30 m) |
 
