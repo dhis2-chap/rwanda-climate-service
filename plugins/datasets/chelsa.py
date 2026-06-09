@@ -12,9 +12,14 @@ import xarray as xr
 from open_climate_service.streaming.protocol import GridSpec
 
 # CHELSA v2.1 monthly mean temperature (tas) on SwitchDrive
-_CHELSA_URL = (
-    "https://os.zhdk.cloud.switch.ch/chelsav2/"
-    "GLOBAL/monthly/tas/CHELSA_tas_{month:02d}_{year}_V.2.1.tif"
+# _CHELSA_URL = (
+#     "https://os.zhdk.cloud.switch.ch/chelsav2/"
+#     "GLOBAL/monthly/tas/CHELSA_tas_{month:02d}_{year}_V.2.1.tif"
+# )
+
+CHELSA_URL_2 = (
+    "https://os.unil.cloud.switch.ch/chelsa02/chelsa/global/monthly/{variable}/{year}/"
+        "CHELSA_{variable}_{month:02d}_{year}_{version}.tif"
 )
 
 # CHELSA resolution: 30 arc-seconds ≈ 0.00833° ≈ 1 km
@@ -53,7 +58,7 @@ class CHELSATemperaturePlugin:
         start_dt = date.fromisoformat(start[:7] + "-01")
         end_dt = date.fromisoformat(end[:7] + "-01")
         # CHELSA V2.1 covers 1981–2018
-        end_dt = min(end_dt, date(2018, 12, 1))
+        end_dt = min(end_dt, date(2021, 12, 1))
         if start_dt > end_dt:
             return []
         result: list[str] = []
@@ -72,10 +77,10 @@ class CHELSATemperaturePlugin:
         import rioxarray  # noqa: F401
 
         year, month = int(period_id[:4]), int(period_id[5:7])
-        url = _CHELSA_URL.format(year=year, month=month)
+        url = CHELSA_URL_2.format(variable="tas", year=year, month=month, version="V.2.1")
         xmin, ymin, xmax, ymax = map(float, bbox)
 
-        da = xr.open_dataarray(url, engine="rasterio").squeeze(drop=True)
+        da = xr.open_dataarray(url, engine="rasterio", mask_and_scale=False).squeeze(drop=True)
         # Clip to bbox
         da = da.sel(x=slice(xmin, xmax), y=slice(ymax, ymin))
         da = da.load()
