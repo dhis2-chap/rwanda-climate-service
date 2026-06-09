@@ -11,7 +11,7 @@
       bbox: [-180, -90, 180, 90]
     temporal:
       begin: "1981-01"
-      end: "2018-12"
+      end: "2021-12"
       resolution: P1M
   ingestion:
     plugin: datasets.chelsa.CHELSATemperaturePlugin
