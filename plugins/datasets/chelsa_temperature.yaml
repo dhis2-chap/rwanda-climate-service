@@ -1,5 +1,5 @@
 - id: chelsa_temperature_monthly
-  name: 2m temperature (CHELSA v2.1)
+  name: 2m temperature - Monthly (CHELSA v2.1)
   short_name: 2m temperature
   variable: temperature
   period_type: monthly
