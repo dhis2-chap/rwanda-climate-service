@@ -67,7 +67,15 @@ chap-GIS uses `exactextract` for exact pixel-in-polygon weighting. This implemen
 Both chap-GIS and this implementation compute the temporal mean temperature first, then apply the TPC once. In the process graph: `reduce_dimension(correct_temperature, t, mean)` → `suitability(mean_temperature)`. The TPC is not applied per month.
 
 ### Output format
-chap-GIS writes a CHAP-compatible CSV directly. Here we use the framework's standard CSV format: columns `t`, `geometry` (district `shapeName`), `hotspot` (fraction). A thin adapter mapping `shapeName` → DHIS2 org-unit UID can translate this for DHIS2 import.
+chap-GIS writes a CHAP-compatible CSV directly. Workflow 2 below uses the framework's standard `CSV` format: columns `t`, `geometry` (district `shapeName`), `hotspot` (fraction).
+
+The framework now also ships dedicated export formats and reusable org-unit aggregation workflows, so a CHAP-ready CSV or a DHIS2 `dataValueSet` can be produced directly — no custom adapter needed:
+
+- `save_result` `format: "CHAPCSV"` → wide CHAP CSV (`time_period`, `location`, one column per variable)
+- `save_result` `format: "DHIS2JSON"` → DHIS2 `dataValueSet` JSON
+- built-in workflows `aggregate_to_dhis2_org_units` (DHIS2 JSON) and `aggregate_to_dhis2_org_units_chap` (CHAP CSV) do load → `aggregate_spatial` → export in a single named process
+
+Each district's GeoJSON `id`/label becomes the `location`/`orgUnit`. Mapping `shapeName` → DHIS2 org-unit UID is still the caller's responsibility (set the feature `id` to the UID before aggregating).
 
 ---
 
@@ -169,6 +177,8 @@ curl -O "http://localhost:8000/jobs/$JOB_ID/results/result.csv"
 
 CSV columns: `t` (ISO month), `geometry` (GeoBoundaries `shapeName`), `hotspot` (fraction [0–1]).
 
+> The framework now ships the built-in `aggregate_to_dhis2_org_units_chap` workflow, which performs this same load → `aggregate_spatial` → export step in a single named process and emits CHAP CSV (use `aggregate_to_dhis2_org_units` for DHIS2 `dataValueSet` JSON). It is a drop-in alternative to the inline graph above once each district feature carries its DHIS2 org-unit UID as `id`.
+
 ---
 
 ## Process implementations
@@ -223,7 +233,7 @@ Equivalent to `suitability.thermal_suitability`. Source: [`plugins/processes/sui
 | chap-GIS feature | Status | Notes |
 |---|---|---|
 | `exactextract` pixel-exact zonal stats | Not implemented | Using centroid-based `aggregate_spatial`; negligible difference at 30 m vs. district scale |
-| CHAP-CSV column naming (`period`, `org_unit_id`) | Not implemented | Columns are `geometry`, `hotspot`; needs a thin adapter for DHIS2 import |
+| CHAP-CSV / DHIS2 output | Available | `save_result` `CHAPCSV`/`DHIS2JSON` formats and the built-in `aggregate_to_dhis2_org_units[_chap]` workflows (see [Output format](#output-format)); set each feature `id` to the DHIS2 org-unit UID |
 
 ---
 
