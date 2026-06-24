@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from open_climate_service.streaming.protocol import GridSpec
+from open_climate_service.streaming import BaseDatasetPlugin
 
 _BUCKET = "copernicus-dem-30m"
 _REGION = "us-east-1"
@@ -66,7 +66,7 @@ def _ensure_tile(lat_floor: int, lon_floor: int) -> Path | None:
     return target
 
 
-class ElevationPlugin:
+class ElevationPlugin(BaseDatasetPlugin):
     """Copernicus DEM GLO-30 elevation dataset plugin.
 
     Downloads 1°×1° COG tiles from the publicly accessible AWS S3 bucket
@@ -79,20 +79,6 @@ class ElevationPlugin:
 
     def __init__(self, **_: Any) -> None:
         pass
-
-    async def probe(self, bbox: list[float], **_: Any) -> GridSpec:
-        xmin, ymin, xmax, ymax = map(float, bbox)
-        nx = max(1, math.ceil((xmax - xmin) / _RESOLUTION_DEG))
-        ny = max(1, math.ceil((ymax - ymin) / _RESOLUTION_DEG))
-        return GridSpec(
-            shape=(ny, nx),
-            crs=4326,
-            dtype=np.dtype("float32"),
-            nodata=np.nan,
-            time_dim="t",
-            x_dim="x",
-            y_dim="y",
-        )
 
     async def periods(self, start: str, end: str, **_: Any) -> list[str]:
         return ["2021"]

@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from open_climate_service.streaming.protocol import GridSpec
+from open_climate_service.streaming import BaseDatasetPlugin
 
 # CHELSA v2.1 monthly mean temperature (tas) on SwitchDrive
 # _CHELSA_URL = (
@@ -26,7 +26,7 @@ CHELSA_URL_2 = (
 _CHELSA_RES_DEG = 30 / 3600
 
 
-class CHELSATemperaturePlugin:
+class CHELSATemperaturePlugin(BaseDatasetPlugin):
     """Streaming plugin for CHELSA v2.1 monthly mean temperature.
 
     Downloads individual monthly GeoTIFF files from the CHELSA archive.
@@ -37,22 +37,6 @@ class CHELSATemperaturePlugin:
 
     max_concurrency = 2
     commit_batch_size = 12
-
-    async def probe(self, bbox: list[float], **_: Any) -> GridSpec:
-        import math
-
-        xmin, ymin, xmax, ymax = map(float, bbox)
-        nx = max(1, math.ceil((xmax - xmin) / _CHELSA_RES_DEG))
-        ny = max(1, math.ceil((ymax - ymin) / _CHELSA_RES_DEG))
-        return GridSpec(
-            shape=(ny, nx),
-            crs=4326,
-            dtype=np.dtype("float32"),
-            nodata=None,
-            time_dim="t",
-            x_dim="x",
-            y_dim="y",
-        )
 
     async def periods(self, start: str, end: str) -> list[str]:
         start_dt = date.fromisoformat(start[:7] + "-01")
