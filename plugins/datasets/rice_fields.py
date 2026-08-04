@@ -13,14 +13,14 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from open_climate_service.streaming.protocol import GridSpec
+from open_climate_service.streaming import BaseDatasetPlugin
 
 _ZENODO_RECORD = "13729353"
 _ZENODO_URL = f"https://zenodo.org/records/{_ZENODO_RECORD}/files/Rwanda.tif"
 _RESOLUTION_DEG = 20 / (111_320)  # 20m in degrees (approx)
 
 
-class RiceFieldsPlugin:
+class RiceFieldsPlugin(BaseDatasetPlugin):
     """Static plugin for the Rwanda rice field raster (Jiang et al. 2023).
 
     Single-period dataset (2023). Downloads from Zenodo on first fetch
@@ -36,22 +36,6 @@ class RiceFieldsPlugin:
 
     def __init__(self, **_: Any) -> None:
         self._cached_path: Path | None = None
-
-    async def probe(self, bbox: list[float], **_: Any) -> GridSpec:
-        import math
-
-        xmin, ymin, xmax, ymax = map(float, bbox)
-        nx = max(1, math.ceil((xmax - xmin) / _RESOLUTION_DEG))
-        ny = max(1, math.ceil((ymax - ymin) / _RESOLUTION_DEG))
-        return GridSpec(
-            shape=(ny, nx),
-            crs=4326,
-            dtype=np.dtype("uint8"),
-            nodata=0,
-            time_dim="t",
-            x_dim="x",
-            y_dim="y",
-        )
 
     async def periods(self, start: str, end: str) -> list[str]:
         # Static 2023 dataset — only one period

@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from open_climate_service.streaming.protocol import GridSpec
+from open_climate_service.streaming import BaseDatasetPlugin
 
 _S3_BASE = "s3://esa-worldcover/v200/2021/map"
 _RESOLUTION_DEG = 10 / 111_320  # 10 m in degrees (approx at equator)
@@ -56,7 +56,7 @@ def _ensure_tile(tile: str) -> Path:
     return target
 
 
-class WorldCoverPlugin:
+class WorldCoverPlugin(BaseDatasetPlugin):
     """ESA WorldCover 10m 2021 (v200) landcover plugin.
 
     Tiles are fetched from the AWS Open Data public S3 bucket on first use
@@ -74,20 +74,6 @@ class WorldCoverPlugin:
 
     def __init__(self, **_: Any) -> None:
         pass
-
-    async def probe(self, bbox: list[float], **_: Any) -> GridSpec:
-        xmin, ymin, xmax, ymax = map(float, bbox)
-        nx = max(1, math.ceil((xmax - xmin) / _RESOLUTION_DEG))
-        ny = max(1, math.ceil((ymax - ymin) / _RESOLUTION_DEG))
-        return GridSpec(
-            shape=(ny, nx),
-            crs=4326,
-            dtype=np.dtype("uint8"),
-            nodata=0,
-            time_dim="t",
-            x_dim="x",
-            y_dim="y",
-        )
 
     async def periods(self, start: str, end: str, **_: Any) -> list[str]:
         if start[:4] <= "2021" <= end[:4]:
