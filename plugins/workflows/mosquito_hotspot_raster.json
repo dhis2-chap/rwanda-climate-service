@@ -49,7 +49,7 @@
     "load_population": {
       "process_id": "load_collection",
       "arguments": {
-        "id": "worldpop_population_yearly",
+        "id": "worldpop_population_global2_R2025A_100m",
         "temporal_extent": {
           "from_parameter": "temporal_extent"
         }
