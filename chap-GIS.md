@@ -47,7 +47,7 @@ All defaults match chap-GIS exactly.
 | CHELSA v2.1 monthly temperature | `chelsa_temperature_monthly` (same) | 1981–2018, ~1 km |
 | Copernicus DEM GLO-30 (CDSE credentials) | `nasadem_elevation` (AWS Open Data, anonymous) | Same product, no credentials needed via S3 |
 | ESA WorldCover 2021 (CDSE credentials) | `esa_worldcover_2021` (AWS Open Data, anonymous) | Same product at 10 m |
-| WorldPop constrained (yearly) | `worldpop_population_yearly` (same) | 100 m |
+| WorldPop constrained (yearly) | `worldpop_population_global2_R2025A_100m` (same) | 100 m |
 | Jiang et al. 2023 rice fields | `africa_rice_fields_2023` (Zenodo, same) | 20 m, Africa only |
 | GeoBoundaries admin boundaries | `plugins/data/rwanda_districts.geojson` (bundled) | Rwanda ADM2, 30 districts |
 
@@ -101,7 +101,7 @@ curl -X POST http://localhost:8000/ingestions -H "Content-Type: application/json
   -d '{"dataset_id": "africa_rice_fields_2023",    "start": "2023",    "publish": true}'
 
 curl -X POST http://localhost:8000/ingestions -H "Content-Type: application/json" \
-  -d '{"dataset_id": "worldpop_population_yearly",  "start": "2018",    "end": "2018", "publish": true}'
+  -d '{"dataset_id": "worldpop_population_global2_R2025A_100m",  "start": "2018",    "end": "2018", "publish": true}'
 
 curl -X POST http://localhost:8000/ingestions -H "Content-Type: application/json" \
   -d '{"dataset_id": "nasadem_elevation",           "start": "2021",    "publish": true}'
@@ -123,7 +123,7 @@ JOB=$(curl -s -X POST http://localhost:8000/jobs \
       "load_elevation":         {"process_id": "load_collection",      "arguments": {"id": "nasadem_elevation"}},
       "load_landcover":         {"process_id": "load_collection",      "arguments": {"id": "esa_worldcover_2021"}},
       "load_rice":              {"process_id": "load_collection",      "arguments": {"id": "africa_rice_fields_2023"}},
-      "load_population":        {"process_id": "load_collection",      "arguments": {"id": "worldpop_population_yearly", "temporal_extent": ["2018-01-01","2018-12-31"]}},
+      "load_population":        {"process_id": "load_collection",      "arguments": {"id": "worldpop_population_global2_R2025A_100m", "temporal_extent": ["2018-01-01","2018-12-31"]}},
       "lc_2d":                  {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_landcover"}, "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
       "rice_2d":                {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_rice"},      "reducer": {"process_graph": {"first": {"process_id": "first", "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
       "pop_2d":                 {"process_id": "reduce_dimension",     "arguments": {"data": {"from_node": "load_population"},"reducer": {"process_graph": {"last":  {"process_id": "last",  "arguments": {"data": {"from_parameter": "data"}}, "result": true}}}, "dimension": "t"}},
