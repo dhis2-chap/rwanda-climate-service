@@ -14,7 +14,7 @@
       end: "2000"
       resolution: P1Y
   ingestion:
-    plugin: datasets.elevation.ElevationPlugin
+    plugin: rasters.elevation.ElevationPlugin
     params: {}
   units: m
   resolution: ~30 m (1 arc-second)

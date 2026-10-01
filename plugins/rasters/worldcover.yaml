@@ -30,7 +30,7 @@
       end: "2021"
       resolution: P1Y
   ingestion:
-    plugin: datasets.worldcover.WorldCoverPlugin
+    plugin: rasters.worldcover.WorldCoverPlugin
     params: {}
   units: "1"
   resolution: 10 m
